@@ -1,6 +1,6 @@
 import { supabase } from '@/lib/supabase'
 
-type NotificationType = 'created' | 'approved' | 'rejected'
+type NotificationType = 'created' | 'approved' | 'rejected' | 'overdue_reminder'
 
 export async function sendNotification(type: NotificationType, passId: string) {
     try {
@@ -16,6 +16,7 @@ export async function sendNotification(type: NotificationType, passId: string) {
             created: pass.approver?.email ? [pass.approver.email] : [],
             approved: pass.creator?.email ? [pass.creator.email] : [],
             rejected: pass.creator?.email ? [pass.creator.email] : [],
+            overdue_reminder: [pass.creator?.email, pass.approver?.email].filter(Boolean) as string[],
         }
 
         const emailsToSend = recipients[type]

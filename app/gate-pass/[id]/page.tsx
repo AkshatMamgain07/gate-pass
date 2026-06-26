@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { use } from 'react'
 import { supabase } from '@/lib/supabase'
 import { sendNotification } from '@/lib/notifications'
+import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, formatDateTime, isOverdue } from '@/lib/gatepass'
 
 interface GatePass {
     id: string
@@ -11,6 +12,8 @@ interface GatePass {
     type: string
     status: string
     department: string
+    from_location: string
+    to_location: string
     driver_name: string
     driver_phone: string
     vehicle_number: string
@@ -20,17 +23,15 @@ interface GatePass {
     invoice_date: string
     invoice_url: string
     created_at: string
+    approved_at: string
+    expiry_date: string
+    exited_at: string
+    returned_at: string
     rejection_reason: string
+    gate_reject_reason: string
 }
 
-const STATUS_COLORS: Record<string, string> = {
-    pending: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    approved: 'bg-green-500/20 text-green-400 border-green-500/30',
-    rejected: 'bg-red-500/20 text-red-400 border-red-500/30',
-    verified: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    cancelled: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
-    completed: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-}
+const EDITABLE_STATUSES = ['pending', 'approved']
 
 export default function GatePassDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -40,6 +41,8 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
     const [userRole, setUserRole] = useState('')
     const [rejectionReason, setRejectionReason] = useState('')
     const [showRejectInput, setShowRejectInput] = useState(false)
+    const [expiryDate, setExpiryDate] = useState('')
+    const [showApproveInput, setShowApproveInput] = useState(false)
     const [actionLoading, setActionLoading] = useState(false)
 
     useEffect(() => {
@@ -67,7 +70,18 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
         fetchData()
     }, [id])
 
+    const handleApproveClick = () => {
+        if (pass?.type === 'returnable') {
+            setShowApproveInput(true)
+        } else {
+            handleApprove()
+        }
+    }
+
     const handleApprove = async () => {
+        if (pass?.type === 'returnable' && !expiryDate) {
+            return
+        }
         setActionLoading(true)
         const { data: { session } } = await supabase.auth.getSession()
 
@@ -77,6 +91,7 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                 status: 'approved',
                 approver_id: session?.user.id,
                 approved_at: new Date().toISOString(),
+                expiry_date: pass?.type === 'returnable' ? expiryDate : null,
             })
             .eq('id', id)
 
@@ -84,11 +99,13 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
             gate_pass_id: id,
             user_id: session?.user.id,
             action: 'approved',
+            metadata: pass?.type === 'returnable' ? { expiry_date: expiryDate } : undefined,
         })
 
         await sendNotification('approved', id)
 
-        setPass(prev => prev ? { ...prev, status: 'approved' } : null)
+        setPass(prev => prev ? { ...prev, status: 'approved', expiry_date: expiryDate } : null)
+        setShowApproveInput(false)
         setActionLoading(false)
     }
 
@@ -121,31 +138,34 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
     }
 
     if (loading) return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-            <p className="text-white text-xl">Loading...</p>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <p className="text-gray-500 text-lg">Loading...</p>
         </div>
     )
 
     if (!pass) return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-            <p className="text-white text-xl">Gate pass not found</p>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <p className="text-gray-500 text-lg">Gate pass not found</p>
         </div>
     )
 
+    const overdue = isOverdue(pass)
+    const canEdit = EDITABLE_STATUSES.includes(pass.status) && (pass.status === 'pending' || userRole === 'admin')
+
     return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 sm:p-6">
+        <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
             <div className="max-w-3xl mx-auto">
-                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-6 sm:p-8">
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 sm:p-8">
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
                         <div>
-                            <h1 className="text-xl sm:text-2xl font-bold text-white">{pass.pass_number}</h1>
-                            <div className="flex gap-2 mt-2">
-                                <span className={`text-xs px-3 py-1 rounded-full border capitalize ${STATUS_COLORS[pass.status]}`}>
-                                    {pass.status}
+                            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">{pass.pass_number}</h1>
+                            <div className="flex gap-2 mt-2 flex-wrap">
+                                <span className={`text-xs px-3 py-1 rounded-full border font-medium ${overdue ? STATUS_COLORS.overdue : STATUS_COLORS[pass.status]}`}>
+                                    {overdue ? STATUS_LABELS.overdue : (STATUS_LABELS[pass.status] || pass.status)}
                                 </span>
-                                <span className={`text-xs px-3 py-1 rounded-full border capitalize ${pass.type === 'inward' ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-purple-500/20 text-purple-400 border-purple-500/30'}`}>
-                                    {pass.type}
+                                <span className={`text-xs px-3 py-1 rounded-full border font-medium ${PASS_TYPE_COLORS[pass.type]}`}>
+                                    {PASS_TYPE_LABELS[pass.type] || pass.type}
                                 </span>
                             </div>
                         </div>
@@ -153,19 +173,19 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                             <a
                                 href={`/api/gate-pass/${id}/pdf`}
                                 target="_blank"
-                                className="px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-800 text-white text-sm font-medium transition"
+                                className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium transition"
                             >
                                 📄 PDF
                             </a>
-                            {pass.status === 'pending' && (
+                            {canEdit && (
                                 <button
                                     onClick={() => router.push(`/gate-pass/${id}/edit`)}
-                                    className="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition"
+                                    className="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition"
                                 >
                                     ✏️ Edit
                                 </button>
                             )}
-                            <button onClick={() => router.push('/dashboard')} className="text-slate-400 hover:text-white transition px-2">
+                            <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-900 transition px-2 text-sm font-medium">
                                 ← Back
                             </button>
                         </div>
@@ -174,30 +194,51 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                         {[
                             { label: 'Department', value: pass.department },
+                            { label: 'From', value: pass.from_location || 'N/A' },
+                            { label: 'To', value: pass.to_location || 'N/A' },
                             { label: 'Vehicle Number', value: pass.vehicle_number },
                             { label: 'Driver Name', value: pass.driver_name },
                             { label: 'Driver Phone', value: pass.driver_phone },
                             { label: 'Invoice Number', value: pass.invoice_number || 'N/A' },
                             { label: 'Invoice Date', value: pass.invoice_date || 'N/A' },
-                            { label: 'Created At', value: new Date(pass.created_at).toLocaleString('en-IN') },
+                            { label: 'Created At', value: formatDateTime(pass.created_at) },
+                            ...(pass.type === 'returnable' ? [{ label: 'Valid Until (Expiry)', value: formatDate(pass.expiry_date) }] : []),
+                            ...(pass.exited_at ? [{ label: 'Exited Gate At', value: formatDateTime(pass.exited_at) }] : []),
+                            ...(pass.returned_at ? [{ label: 'Returned At', value: formatDateTime(pass.returned_at) }] : []),
                         ].map(({ label, value }) => (
-                            <div key={label} className="bg-white/5 border border-white/10 rounded-xl p-4">
-                                <p className="text-slate-500 text-xs mb-1">{label}</p>
-                                <p className="text-white text-sm font-medium">{value}</p>
+                            <div key={label} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                <p className="text-gray-400 text-xs mb-1">{label}</p>
+                                <p className="text-gray-900 text-sm font-medium">{value}</p>
                             </div>
                         ))}
                     </div>
 
+                    {overdue && (
+                        <div className="mb-6 bg-orange-50 border border-orange-200 rounded-xl p-4">
+                            <p className="text-orange-700 text-sm font-medium">
+                                ⚠️ This material has not been returned and the validity period has expired. A reminder email has been sent.
+                            </p>
+                        </div>
+                    )}
+
                     <div className="mb-6">
-                        <h2 className="text-white font-semibold mb-3">Materials ({pass.materials?.length})</h2>
+                        <h2 className="text-gray-900 font-semibold mb-3">Materials ({pass.materials?.length})</h2>
                         <div className="space-y-2">
                             {pass.materials?.map((m: any, i: number) => (
-                                <div key={i} className="bg-white/5 border border-white/10 rounded-xl p-4 flex justify-between">
-                                    <div>
-                                        <p className="text-white font-medium">{m.name}</p>
-                                        <p className="text-slate-400 text-sm">{m.quantity} {m.unit}</p>
+                                <div key={i} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                    <div className="flex justify-between">
+                                        <div>
+                                            <p className="text-gray-900 font-medium">{m.name}</p>
+                                            <p className="text-gray-500 text-sm">{m.quantity} {m.unit}</p>
+                                        </div>
+                                        <p className="text-gray-900 font-medium">₹{m.value}</p>
                                     </div>
-                                    <p className="text-white font-medium">₹{m.value}</p>
+                                    {(m.material_id || m.date_issued) && (
+                                        <div className="flex gap-4 mt-2 pt-2 border-t border-gray-200 text-xs text-gray-400">
+                                            {m.material_id && <span className="font-mono">ID: {m.material_id}</span>}
+                                            {m.date_issued && <span>Issued: {m.date_issued}</span>}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -205,28 +246,36 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
 
                     {pass.invoice_url && (
                         <div className="mb-6">
-                            <a href={pass.invoice_url} target="_blank" className="text-blue-400 hover:text-blue-300 text-sm underline">
+                            <a href={pass.invoice_url} target="_blank" className="text-blue-600 hover:text-blue-700 text-sm underline">
                                 View Invoice File
                             </a>
                         </div>
                     )}
 
                     {pass.status === 'rejected' && pass.rejection_reason && (
-                        <div className="mb-6 bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                            <p className="text-red-400 text-sm">
+                        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+                            <p className="text-red-700 text-sm">
                                 <span className="font-semibold">Rejection Reason:</span> {pass.rejection_reason}
                             </p>
                         </div>
                     )}
 
+                    {pass.gate_reject_reason && (
+                        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4">
+                            <p className="text-red-700 text-sm">
+                                <span className="font-semibold">Gate Denied Reason:</span> {pass.gate_reject_reason}
+                            </p>
+                        </div>
+                    )}
+
                     {userRole === 'admin' && pass.status === 'pending' && (
-                        <div className="border-t border-white/10 pt-6">
-                            <h2 className="text-white font-semibold mb-4">Actions</h2>
+                        <div className="border-t border-gray-200 pt-6">
+                            <h2 className="text-gray-900 font-semibold mb-4">Actions</h2>
                             <div className="flex gap-3">
                                 <button
-                                    onClick={handleApprove}
+                                    onClick={handleApproveClick}
                                     disabled={actionLoading}
-                                    className="flex-1 py-3 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-green-900 text-white font-semibold transition"
+                                    className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-semibold transition"
                                 >
                                     ✓ Approve
                                 </button>
@@ -237,6 +286,29 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                                     ✕ Reject
                                 </button>
                             </div>
+
+                            {showApproveInput && (
+                                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                    <label className="block text-sm font-medium text-blue-900 mb-2">
+                                        Valid until (when must the material be returned?)
+                                    </label>
+                                    <input
+                                        type="date"
+                                        value={expiryDate}
+                                        min={new Date().toISOString().slice(0, 10)}
+                                        onChange={e => setExpiryDate(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl bg-white border border-blue-300 text-gray-900 outline-none focus:border-blue-500 transition mb-3"
+                                    />
+                                    <button
+                                        onClick={handleApprove}
+                                        disabled={actionLoading || !expiryDate}
+                                        className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-semibold transition"
+                                    >
+                                        Confirm Approval
+                                    </button>
+                                </div>
+                            )}
+
                             {showRejectInput && (
                                 <div className="mt-4">
                                     <input
@@ -244,12 +316,12 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                                         placeholder="Rejection reason..."
                                         value={rejectionReason}
                                         onChange={e => setRejectionReason(e.target.value)}
-                                        className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white placeholder:text-slate-500 outline-none focus:border-red-500 transition mb-3"
+                                        className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-red-500 transition mb-3"
                                     />
                                     <button
                                         onClick={handleReject}
                                         disabled={actionLoading || !rejectionReason}
-                                        className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-red-900 text-white font-semibold transition"
+                                        className="w-full py-3 rounded-xl bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white font-semibold transition"
                                     >
                                         Confirm Reject
                                     </button>
@@ -260,6 +332,6 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
 
                 </div>
             </div>
-        </main >
+        </main>
     )
 }

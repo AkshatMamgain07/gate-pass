@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-type NotificationType = 'created' | 'approved' | 'rejected'
+type NotificationType = 'created' | 'approved' | 'rejected' | 'overdue_reminder'
 
 function getSubjectAndHtml(
     type: NotificationType,
@@ -15,12 +15,14 @@ function getSubjectAndHtml(
         created: `New Gate Pass Pending Approval: ${passNumber}`,
         approved: `Your Gate Pass Has Been Approved: ${passNumber}`,
         rejected: `Your Gate Pass Has Been Rejected: ${passNumber}`,
+        overdue_reminder: `Reminder: Material Not Yet Returned – ${passNumber}`,
     }
 
     const messages: Record<NotificationType, string> = {
         created: `A new gate pass <strong>${passNumber}</strong> has been submitted and is waiting for your approval.`,
         approved: `Your gate pass <strong>${passNumber}</strong> has been approved.`,
         rejected: `Your gate pass <strong>${passNumber}</strong> has been rejected. Please check the details for more information.`,
+        overdue_reminder: `The material sent out on returnable gate pass <strong>${passNumber}</strong> was due back by its validity date and has not yet been marked returned at the gate. Please follow up.`,
     }
 
     const html = `

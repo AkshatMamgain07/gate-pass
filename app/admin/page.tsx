@@ -90,24 +90,24 @@ export default function AdminPage() {
     }
 
     if (loading) return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-            <p className="text-white text-xl">Loading...</p>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <p className="text-gray-500 text-lg">Loading...</p>
         </div>
     )
 
     if (!isAdmin) return null
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-4 sm:p-6">
+        <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
             <div className="max-w-5xl mx-auto">
-                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-6 sm:p-8">
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 sm:p-8">
 
                     <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
-                            <p className="text-slate-400 mt-1">Manage users and vendors</p>
+                            <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
+                            <p className="text-gray-500 mt-1">Manage users and vendors</p>
                         </div>
-                        <button onClick={() => router.push('/dashboard')} className="text-slate-400 hover:text-white transition">
+                        <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-900 transition">
                             ← Back
                         </button>
                     </div>
@@ -116,13 +116,13 @@ export default function AdminPage() {
                     <div className="flex gap-2 mb-6">
                         <button
                             onClick={() => setTab('users')}
-                            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === 'users' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === 'users' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                         >
                             Users ({users.length})
                         </button>
                         <button
                             onClick={() => setTab('vendors')}
-                            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === 'vendors' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === 'vendors' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
                         >
                             Vendors ({vendors.length})
                         </button>
@@ -132,11 +132,11 @@ export default function AdminPage() {
                     {tab === 'users' && (
                         <div className="space-y-3">
                             {users.map(user => (
-                                <div key={user.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div key={user.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div>
-                                        <p className="text-white font-medium">{user.full_name || user.email}</p>
-                                        <p className="text-slate-400 text-sm">{user.email}</p>
-                                        {user.department && <p className="text-slate-500 text-xs">{user.department}</p>}
+                                        <p className="text-gray-900 font-medium">{user.full_name || user.email}</p>
+                                        <p className="text-gray-500 text-sm">{user.email}</p>
+                                        {user.department && <p className="text-gray-400 text-xs">{user.department}</p>}
                                     </div>
                                     <div>
                                         {editingUserId === user.id ? (
@@ -145,14 +145,14 @@ export default function AdminPage() {
                                                 onChange={e => updateUserRole(user.id, e.target.value)}
                                                 onBlur={() => setEditingUserId(null)}
                                                 autoFocus
-                                                className="px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white text-sm outline-none focus:border-blue-500"
+                                                className="px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-900 text-sm outline-none focus:border-blue-500"
                                             >
                                                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                                             </select>
                                         ) : (
                                             <button
                                                 onClick={() => setEditingUserId(user.id)}
-                                                className="px-3 py-1 rounded-full border bg-blue-500/20 text-blue-400 border-blue-500/30 text-xs capitalize hover:bg-blue-500/30 transition"
+                                                className="px-3 py-1 rounded-full border bg-blue-50 text-blue-700 border-blue-200 text-xs capitalize hover:bg-blue-100 transition"
                                             >
                                                 {user.role} ✏️
                                             </button>
@@ -167,20 +167,20 @@ export default function AdminPage() {
                     {tab === 'vendors' && (
                         <div className="space-y-3">
                             {vendors.map(vendor => (
-                                <div key={vendor.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div key={vendor.id} className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                     <div>
-                                        <p className="text-white font-medium">{vendor.name}</p>
-                                        <p className="text-slate-400 text-sm">{vendor.contact_person} • {vendor.phone}</p>
+                                        <p className="text-gray-900 font-medium">{vendor.name}</p>
+                                        <p className="text-gray-500 text-sm">{vendor.contact_person} • {vendor.phone}</p>
                                     </div>
                                     <div>
                                         {vendor.is_approved ? (
-                                            <span className="px-3 py-1 rounded-full border bg-green-500/20 text-green-400 border-green-500/30 text-xs">
+                                            <span className="px-3 py-1 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200 text-xs">
                                                 Approved
                                             </span>
                                         ) : (
                                             <button
                                                 onClick={() => approveVendor(vendor.id)}
-                                                className="px-3 py-1 rounded-full border bg-yellow-500/20 text-yellow-400 border-yellow-500/30 text-xs hover:bg-yellow-500/30 transition"
+                                                className="px-3 py-1 rounded-full border bg-amber-50 text-amber-700 border-amber-200 text-xs hover:bg-amber-100 transition"
                                             >
                                                 Approve
                                             </button>

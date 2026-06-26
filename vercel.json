@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/gate-pass/check-overdue",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}

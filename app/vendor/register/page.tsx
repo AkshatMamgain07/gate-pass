@@ -67,79 +67,79 @@ export default function VendorRegisterPage() {
     }
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center px-4">
+        <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
             <div className="w-full max-w-md">
-                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-8">
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-8">
 
                     <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold text-white">Vendor Registration</h1>
-                        <p className="text-slate-400 mt-2">Register your company for Gate Pass System</p>
+                        <h1 className="text-3xl font-bold text-gray-900">Vendor Registration</h1>
+                        <p className="text-gray-500 mt-2">Register your company for Gate Pass System</p>
                     </div>
 
                     <div className="space-y-5">
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Company Name</label>
+                            <label className="block text-sm text-gray-700 mb-2">Company Name</label>
                             <input
                                 type="text"
                                 placeholder="e.g. ABC Suppliers"
                                 value={name}
                                 onChange={e => setName(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 transition"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Contact Person</label>
+                            <label className="block text-sm text-gray-700 mb-2">Contact Person</label>
                             <input
                                 type="text"
                                 placeholder="Full name"
                                 value={contactPerson}
                                 onChange={e => setContactPerson(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 transition"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Phone Number</label>
+                            <label className="block text-sm text-gray-700 mb-2">Phone Number</label>
                             <input
                                 type="text"
                                 placeholder="10-digit mobile number"
                                 value={phone}
                                 onChange={e => setPhone(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 transition"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Email Address</label>
+                            <label className="block text-sm text-gray-700 mb-2">Email Address</label>
                             <input
                                 type="email"
                                 placeholder="company@example.com"
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 transition"
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Password</label>
+                            <label className="block text-sm text-gray-700 mb-2">Password</label>
                             <input
                                 type="password"
                                 placeholder="At least 6 characters"
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 transition"
                             />
                         </div>
 
                         {error && (
-                            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
+                            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                                 {error}
                             </div>
                         )}
 
                         {success && (
-                            <div className="text-sm text-green-400 bg-green-500/10 border border-green-500/30 rounded-lg px-4 py-3">
+                            <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3">
                                 {success}
                             </div>
                         )}
@@ -147,15 +147,15 @@ export default function VendorRegisterPage() {
                         <button
                             onClick={handleSubmit}
                             disabled={loading}
-                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 text-white font-semibold transition shadow-lg shadow-blue-600/30"
+                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold transition shadow-sm"
                         >
                             {loading ? 'Registering...' : 'Register'}
                         </button>
                     </div>
 
-                    <p className="text-center text-slate-400 mt-6">
+                    <p className="text-center text-gray-500 mt-6">
                         Already registered?{' '}
-                        <a href="/login" className="text-blue-400 hover:text-blue-300 font-medium">
+                        <a href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
                             Login
                         </a>
                     </p>

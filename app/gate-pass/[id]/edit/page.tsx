@@ -3,15 +3,11 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { use } from 'react'
 import { supabase } from '@/lib/supabase'
+import { UNITS, PassType, Material } from '@/lib/gatepass'
 
-const UNITS = ['kg', 'pieces', 'liters', 'bags', 'boxes', 'meters']
-
-interface Material {
-    name: string
-    quantity: number
-    unit: string
-    value: number
-}
+// Edit is allowed for 'pending' (anyone who can see it) and 'approved'
+// (admin/approver only, since it has already gone through approval).
+const EDITABLE_STATUSES = ['pending', 'approved']
 
 export default function EditGatePassPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params)
@@ -19,9 +15,13 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [error, setError] = useState('')
+    const [userRole, setUserRole] = useState('')
+    const [originalStatus, setOriginalStatus] = useState('')
 
-    const [type, setType] = useState<'inward' | 'outward'>('inward')
+    const [passType, setPassType] = useState<PassType>('non_returnable')
     const [department, setDepartment] = useState('')
+    const [fromLocation, setFromLocation] = useState('')
+    const [toLocation, setToLocation] = useState('')
     const [vehicleNumber, setVehicleNumber] = useState('')
     const [driverName, setDriverName] = useState('')
     const [driverPhone, setDriverPhone] = useState('')
@@ -35,6 +35,13 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
             const { data: { session } } = await supabase.auth.getSession()
             if (!session) return router.push('/login')
 
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', session.user.id)
+                .single()
+            setUserRole(profile?.role || 'user')
+
             const { data } = await supabase
                 .from('gate_passes')
                 .select('*')
@@ -43,13 +50,21 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
 
             if (!data) return router.push('/dashboard')
 
-            if (data.status !== 'pending') {
-                alert('Only pending passes can be edited!')
+            if (!EDITABLE_STATUSES.includes(data.status)) {
+                alert('This gate pass can no longer be edited (it has moved past approval/exit).')
                 return router.push(`/gate-pass/${id}`)
             }
 
-            setType(data.type)
+            if (data.status === 'approved' && (profile?.role || 'user') !== 'admin') {
+                alert('Only an admin/approver can edit a gate pass that is already approved.')
+                return router.push(`/gate-pass/${id}`)
+            }
+
+            setOriginalStatus(data.status)
+            setPassType(data.type)
             setDepartment(data.department)
+            setFromLocation(data.from_location || '')
+            setToLocation(data.to_location || '')
             setVehicleNumber(data.vehicle_number)
             setDriverName(data.driver_name)
             setDriverPhone(data.driver_phone)
@@ -63,7 +78,15 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
     }, [id])
 
     const addMaterial = () => {
-        setMaterials([...materials, { name: '', quantity: 0, unit: 'kg', value: 0 }])
+        const shortPass = passNumber.replace(/\//g, '-')
+        setMaterials([...materials, {
+            material_id: `${shortPass}-M${materials.length + 1}`,
+            name: '',
+            quantity: 0,
+            unit: 'kg',
+            value: 0,
+            date_issued: new Date().toISOString().slice(0, 10),
+        }])
     }
 
     const removeMaterial = (index: number) => {
@@ -79,6 +102,8 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
     const handleSave = async () => {
         setError('')
         if (!department || department.length < 2) return setError('Department required')
+        if (!fromLocation || fromLocation.length < 2) return setError('From location required')
+        if (!toLocation || toLocation.length < 2) return setError('To location required')
         if (!vehicleNumber || vehicleNumber.length < 4) return setError('Valid vehicle number required')
         if (!driverName || driverName.length < 2) return setError('Driver name required')
         if (!/^\d{10}$/.test(driverPhone)) return setError('Valid 10-digit phone required')
@@ -90,14 +115,18 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
         const { error: updateError } = await supabase
             .from('gate_passes')
             .update({
-                type,
+                type: passType,
                 department,
+                from_location: fromLocation,
+                to_location: toLocation,
                 vehicle_number: vehicleNumber,
                 driver_name: driverName,
                 driver_phone: driverPhone,
                 invoice_number: invoiceNumber || null,
                 invoice_date: invoiceDate || null,
                 materials,
+                last_edited_at: new Date().toISOString(),
+                last_edited_by: session?.user.id,
             })
             .eq('id', id)
 
@@ -110,7 +139,7 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
         await supabase.from('activity_logs').insert({
             gate_pass_id: id,
             user_id: session?.user.id,
-            action: 'edited',
+            action: originalStatus === 'approved' ? 'edited_after_approval' : 'edited',
         })
 
         router.push(`/gate-pass/${id}`)
@@ -136,98 +165,133 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
     }
 
     if (loading) return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center">
-            <p className="text-white text-xl">Loading...</p>
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <p className="text-gray-500 text-lg">Loading...</p>
         </div>
     )
 
     return (
-        <main className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
+        <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
             <div className="max-w-3xl mx-auto">
-                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-2xl shadow-2xl p-8">
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 sm:p-8">
 
-                    <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center justify-between mb-6">
                         <div>
-                            <h1 className="text-2xl font-bold text-white">Edit Gate Pass</h1>
-                            <p className="text-slate-400 mt-1">{passNumber}</p>
+                            <h1 className="text-2xl font-bold text-gray-900">Edit Gate Pass</h1>
+                            <p className="text-gray-500 mt-1">{passNumber}</p>
                         </div>
-                        <button onClick={() => router.push(`/gate-pass/${id}`)} className="text-slate-400 hover:text-white transition">
+                        <button onClick={() => router.push(`/gate-pass/${id}`)} className="text-gray-500 hover:text-gray-900 transition text-sm font-medium">
                             ← Back
                         </button>
                     </div>
 
+                    {originalStatus === 'approved' && (
+                        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-800">
+                            This pass is already approved. Editing it will not reset the approval, but the change will be recorded in the activity log.
+                        </div>
+                    )}
+
                     <div className="space-y-6">
 
-                        {/* Type */}
+                        {/* Returnable / Non-returnable */}
                         <div>
-                            <label className="block text-sm text-slate-300 mb-3">Pass Type</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-3">Is the material coming back?</label>
                             <div className="flex gap-4">
-                                {(['inward', 'outward'] as const).map(t => (
+                                {(['returnable', 'non_returnable'] as const).map(t => (
                                     <button
                                         key={t}
-                                        onClick={() => setType(t)}
-                                        className={`flex-1 py-3 rounded-xl font-medium transition capitalize ${type === t ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                        onClick={() => setPassType(t)}
+                                        className={`flex-1 py-3 rounded-xl font-medium transition border capitalize ${passType === t
+                                            ? 'bg-blue-600 text-white border-blue-600'
+                                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                                            }`}
                                     >
-                                        {t}
+                                        {t === 'returnable' ? 'Returnable' : 'Non-Returnable'}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
+                        {/* From / To */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">From (location)</label>
+                                <input
+                                    type="text"
+                                    value={fromLocation}
+                                    onChange={e => setFromLocation(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">To (location)</label>
+                                <input
+                                    type="text"
+                                    value={toLocation}
+                                    onChange={e => setToLocation(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                                />
+                            </div>
+                        </div>
+
                         {/* Department */}
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Department</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
                             <input
                                 type="text"
                                 value={department}
                                 onChange={e => setDepartment(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
                         </div>
 
                         {/* Vehicle & Driver */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm text-slate-300 mb-2">Vehicle Number</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Vehicle Number</label>
                                 <input
                                     type="text"
                                     value={vehicleNumber}
                                     onChange={e => setVehicleNumber(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white outline-none focus:border-blue-500 transition"
+                                    className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-slate-300 mb-2">Driver Name</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Driver Name</label>
                                 <input
                                     type="text"
                                     value={driverName}
                                     onChange={e => setDriverName(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white outline-none focus:border-blue-500 transition"
+                                    className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                                 />
                             </div>
                         </div>
 
                         <div>
-                            <label className="block text-sm text-slate-300 mb-2">Driver Phone</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Driver Phone</label>
                             <input
                                 type="text"
                                 value={driverPhone}
                                 onChange={e => setDriverPhone(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white outline-none focus:border-blue-500 transition"
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
                         </div>
 
                         {/* Materials */}
                         <div>
                             <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm text-slate-300">Materials</label>
-                                <button onClick={addMaterial} className="text-sm text-blue-400 hover:text-blue-300 transition">
+                                <label className="text-sm font-medium text-gray-700">Materials</label>
+                                <button onClick={addMaterial} className="text-sm text-blue-600 hover:text-blue-700 font-medium transition">
                                     + Add Material
                                 </button>
                             </div>
                             <div className="space-y-3">
                                 {materials.map((material, index) => (
-                                    <div key={index} className="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+                                    <div key={index} className="bg-gray-50 border border-gray-200 rounded-xl p-4">
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-xs text-gray-400 font-mono">{material.material_id}</span>
+                                            <span className="text-xs text-gray-400">Issued: {material.date_issued}</span>
+                                        </div>
                                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                             <div className="col-span-2 md:col-span-1">
                                                 <input
@@ -235,7 +299,7 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
                                                     placeholder="Material name"
                                                     value={material.name}
                                                     onChange={e => updateMaterial(index, 'name', e.target.value)}
-                                                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 text-sm transition"
+                                                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 text-sm transition"
                                                 />
                                             </div>
                                             <div>
@@ -244,14 +308,14 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
                                                     placeholder="Qty"
                                                     value={material.quantity || ''}
                                                     onChange={e => updateMaterial(index, 'quantity', parseFloat(e.target.value))}
-                                                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 text-sm transition"
+                                                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 text-sm transition"
                                                 />
                                             </div>
                                             <div>
                                                 <select
                                                     value={material.unit}
                                                     onChange={e => updateMaterial(index, 'unit', e.target.value)}
-                                                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white outline-none focus:border-blue-500 text-sm transition"
+                                                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 text-sm transition"
                                                 >
                                                     {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                                                 </select>
@@ -262,10 +326,10 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
                                                     placeholder="Value ₹"
                                                     value={material.value || ''}
                                                     onChange={e => updateMaterial(index, 'value', parseFloat(e.target.value))}
-                                                    className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-600 text-white placeholder:text-slate-500 outline-none focus:border-blue-500 text-sm transition"
+                                                    className="w-full px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 text-sm transition"
                                                 />
                                                 {materials.length > 1 && (
-                                                    <button onClick={() => removeMaterial(index)} className="text-red-400 hover:text-red-300 px-2 transition">
+                                                    <button onClick={() => removeMaterial(index)} className="text-red-500 hover:text-red-600 px-2 transition">
                                                         ✕
                                                     </button>
                                                 )}
@@ -279,27 +343,27 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
                         {/* Invoice */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm text-slate-300 mb-2">Invoice Number (optional)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Number (optional)</label>
                                 <input
                                     type="text"
                                     value={invoiceNumber}
                                     onChange={e => setInvoiceNumber(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white outline-none focus:border-blue-500 transition"
+                                    className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm text-slate-300 mb-2">Invoice Date (optional)</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Invoice Date (optional)</label>
                                 <input
                                     type="date"
                                     value={invoiceDate}
                                     onChange={e => setInvoiceDate(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl bg-slate-900/70 border border-slate-700 text-white outline-none focus:border-blue-500 transition"
+                                    className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                                 />
                             </div>
                         </div>
 
                         {error && (
-                            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
+                            <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                                 {error}
                             </div>
                         )}
@@ -308,13 +372,13 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
-                                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-900 text-white font-semibold transition"
+                                className="flex-1 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold transition"
                             >
                                 {saving ? 'Saving...' : 'Save Changes'}
                             </button>
                             <button
                                 onClick={handleCancel}
-                                className="px-6 py-3 rounded-xl bg-red-600/20 hover:bg-red-600/40 text-red-400 border border-red-500/30 font-semibold transition"
+                                className="px-6 py-3 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 font-semibold transition"
                             >
                                 Cancel Pass
                             </button>
