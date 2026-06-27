@@ -17,18 +17,41 @@ export default function LoginPage() {
         setError('')
         setLoading(true)
 
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
             email,
             password,
         })
 
-        setLoading(false)
-
         if (error) {
+            setLoading(false)
             setError(error.message)
-        } else {
-            router.push('/dashboard')
+            return
         }
+
+        // Safety net: at this point we have a real, authenticated session,
+        // so auth.uid() will match — RLS will allow this write. If the
+        // database trigger that's supposed to create the profile row on
+        // signup never ran (or ran before it existed), this backfills it
+        // instead of leaving the user stuck with no profile.
+        if (data.user) {
+            const { data: existing } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('id', data.user.id)
+                .maybeSingle()
+
+            if (!existing) {
+                await supabase.from('profiles').upsert({
+                    id: data.user.id,
+                    email: data.user.email,
+                    full_name: data.user.user_metadata?.full_name || null,
+                    role: 'user',
+                }, { onConflict: 'id' })
+            }
+        }
+
+        setLoading(false)
+        router.push('/dashboard')
     }
 
     return (

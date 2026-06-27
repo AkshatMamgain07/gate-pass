@@ -88,28 +88,42 @@ export default function SignupPage() {
             return
         }
 
-        // Use upsert instead of insert: if a database trigger already created
-        // a profile row for this auth user (common Supabase pattern), insert()
-        // throws "duplicate key value violates unique constraint profiles_pkey".
-        // upsert() updates that row instead of failing.
-        const { error: profileError } = await supabase
-            .from('profiles')
-            .upsert({
-                id: authData.user.id,
-                email,
-                full_name: fullName.trim(),
-                role: 'user',
-            }, { onConflict: 'id' })
-
-        setLoading(false)
-
-        if (profileError) {
-            setError(profileError.message)
-            return
+        // IMPORTANT: if email confirmation is enabled in Supabase Auth
+        // settings (the default), signUp() does NOT return an active
+        // session — the user isn't actually authenticated yet. Any write
+        // to `profiles` at this point runs as an anonymous request, so it
+        // will always fail your RLS policy ("new row violates row-level
+        // security policy"), no matter what we insert.
+        //
+        // The profile row itself should be created by a Postgres trigger
+        // on auth.users (see supabase_migration_v3_auth_trigger.sql) —
+        // that trigger runs with elevated privileges and bypasses RLS
+        // entirely, so it works regardless of session state.
+        //
+        // We only attempt a client-side write here as a *bonus* sync when
+        // we do have a session (i.e. email confirmation is OFF), so the
+        // profile reflects the name immediately without waiting on the
+        // trigger.
+        if (authData.session) {
+            await supabase
+                .from('profiles')
+                .upsert({
+                    id: authData.user.id,
+                    email,
+                    full_name: fullName.trim(),
+                    role: 'user',
+                }, { onConflict: 'id' })
+            // Not blocking on error here — the trigger is the source of
+            // truth for profile creation; this is just a same-second sync.
         }
 
-        setSuccess('Account created! Check your email to verify, then log in.')
-        setTimeout(() => router.push('/login'), 1500)
+        setLoading(false)
+        setSuccess(
+            authData.session
+                ? 'Account created!'
+                : 'Account created! Check your email to verify, then log in.'
+        )
+        setTimeout(() => router.push(authData.session ? '/dashboard' : '/login'), 1500)
     }
 
     return (
