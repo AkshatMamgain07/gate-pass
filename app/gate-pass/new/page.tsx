@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { assignApprover } from '@/lib/approvers'
+import { requireRole, type AuthedProfile } from '@/lib/auth'
+import { assignApprover, APPROVER_MATRIX } from '@/lib/approvers'
 import { sendNotification } from '@/lib/notifications'
 import { UNITS, PassType, generatePassNumber, buildMaterialsWithIds } from '@/lib/gatepass'
 
@@ -25,6 +26,8 @@ export default function NewGatePassPage() {
     const [error, setError] = useState('')
     const [success, setSuccess] = useState('')
     const [vendors, setVendors] = useState<Vendor[]>([])
+    const [profile, setProfile] = useState<AuthedProfile | null>(null)
+    const [checkingAccess, setCheckingAccess] = useState(true)
 
     const [passType, setPassType] = useState<PassType>('non_returnable')
     const [vendorId, setVendorId] = useState('')
@@ -41,15 +44,31 @@ export default function NewGatePassPage() {
         { name: '', quantity: 0, unit: 'kg', value: 0 }
     ])
 
+    const departmentOptions = Object.keys(APPROVER_MATRIX)
+
     useEffect(() => {
-        const fetchVendors = async () => {
+        const init = async () => {
+            // Vendors and security staff don't raise gate passes — only
+            // internal staff (user/approver/admin) should reach this form.
+            const p = await requireRole(['user', 'approver', 'admin'], router)
+            if (!p) return
+            setProfile(p)
+
+            // Auto-fill department from the user's profile if it matches
+            // one of the valid departments, saving them a step.
+            if (p.department && departmentOptions.includes(p.department)) {
+                setDepartment(p.department)
+            }
+
             const { data } = await supabase
                 .from('vendors')
                 .select('id, name')
                 .eq('is_approved', true)
             setVendors(data || [])
+
+            setCheckingAccess(false)
         }
-        fetchVendors()
+        init()
     }, [])
 
     const addMaterial = () => {
@@ -79,8 +98,7 @@ export default function NewGatePassPage() {
         if (materials.some(m => !m.name || m.quantity <= 0)) return setError('Fill all material details'), setLoading(false)
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session) return router.push('/login')
+            if (!profile) return setError('Session expired, please log in again.'), setLoading(false)
 
             const passNumber = await generatePassNumber()
             const materialsWithIds = buildMaterialsWithIds(materials, passNumber)
@@ -107,7 +125,7 @@ export default function NewGatePassPage() {
                     pass_number: passNumber,
                     type: passType,
                     status: 'pending',
-                    created_by: session.user.id,
+                    created_by: profile.id,
                     department,
                     from_location: fromLocation,
                     to_location: toLocation,
@@ -128,7 +146,7 @@ export default function NewGatePassPage() {
 
             await supabase.from('activity_logs').insert({
                 gate_pass_id: gatePass.id,
-                user_id: session.user.id,
+                user_id: profile.id,
                 action: 'created',
             })
 
@@ -144,23 +162,38 @@ export default function NewGatePassPage() {
         }
     }
 
-    return (
-        <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
-            <div className="max-w-3xl mx-auto">
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 sm:p-8">
+    if (checkingAccess) {
+        return (
+            <main className="min-h-screen bg-gray-50 flex items-center justify-center">
+                <p className="text-gray-400 text-sm">Loading...</p>
+            </main>
+        )
+    }
 
-                    <div className="flex items-center justify-between mb-8">
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-900">New Gate Pass</h1>
-                            <p className="text-gray-500 mt-1">Create a new outward material gate pass</p>
-                        </div>
-                        <button
-                            onClick={() => router.push('/dashboard')}
-                            className="text-gray-500 hover:text-gray-900 transition text-sm font-medium"
-                        >
-                            ← Back
-                        </button>
+    return (
+        <main className="min-h-screen bg-gray-50 pb-28 sm:pb-10">
+            {/* Sticky top bar — full-bleed, app-like on mobile, stays put on desktop too */}
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-4 sm:px-6 py-4">
+                <div className="max-w-4xl mx-auto flex items-center justify-between">
+                    <div>
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">New Gate Pass</h1>
+                        {profile && (
+                            <p className="text-xs sm:text-sm text-gray-400 mt-0.5">
+                                Creating as {profile.full_name || profile.email}
+                            </p>
+                        )}
                     </div>
+                    <button
+                        onClick={() => router.push('/dashboard')}
+                        className="text-gray-500 hover:text-gray-900 transition text-sm font-medium shrink-0"
+                    >
+                        ← Back
+                    </button>
+                </div>
+            </div>
+
+            <div className="max-w-4xl mx-auto px-4 sm:px-6 pt-6">
+                <div className="bg-white border border-gray-200 sm:rounded-2xl shadow-sm p-4 sm:p-8 -mx-4 sm:mx-0">
 
                     <div className="space-y-6">
 
@@ -236,13 +269,19 @@ export default function NewGatePassPage() {
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                            <input
-                                type="text"
-                                placeholder="e.g. Production, Stores"
+                            <select
                                 value={department}
                                 onChange={e => setDepartment(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
-                            />
+                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
+                            >
+                                <option value="">Select department</option>
+                                {departmentOptions.map(dep => (
+                                    <option key={dep} value={dep}>{dep}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1.5">
+                                Determines who approves this pass — pulled from your profile if set
+                            </p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -252,7 +291,8 @@ export default function NewGatePassPage() {
                                     type="text"
                                     placeholder="e.g. UP32AB1234"
                                     value={vehicleNumber}
-                                    onChange={e => setVehicleNumber(e.target.value)}
+                                    maxLength={15}
+                                    onChange={e => setVehicleNumber(e.target.value.toUpperCase())}
                                     className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                                 />
                             </div>
@@ -272,9 +312,11 @@ export default function NewGatePassPage() {
                             <label className="block text-sm font-medium text-gray-700 mb-2">Driver Phone</label>
                             <input
                                 type="text"
+                                inputMode="numeric"
                                 placeholder="10-digit mobile number"
                                 value={driverPhone}
-                                onChange={e => setDriverPhone(e.target.value)}
+                                maxLength={10}
+                                onChange={e => setDriverPhone(e.target.value.replace(/\D/g, ''))}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
                         </div>
@@ -390,16 +432,28 @@ export default function NewGatePassPage() {
                             </div>
                         )}
 
+                        {/* Desktop: normal inline button. Hidden on mobile in favor of the sticky bar below. */}
                         <button
                             onClick={handleSubmit}
                             disabled={loading}
-                            className="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold transition shadow-sm"
+                            className="hidden sm:block w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold transition shadow-sm"
                         >
                             {loading ? 'Creating...' : 'Create Gate Pass'}
                         </button>
 
                     </div>
                 </div>
+            </div>
+
+            {/* Mobile: fixed bottom action bar, like a native app's primary CTA */}
+            <div className="sm:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 z-10">
+                <button
+                    onClick={handleSubmit}
+                    disabled={loading}
+                    className="w-full py-3.5 rounded-xl bg-blue-600 active:bg-blue-700 disabled:bg-blue-300 text-white font-semibold transition shadow-sm"
+                >
+                    {loading ? 'Creating...' : 'Create Gate Pass'}
+                </button>
             </div>
         </main>
     )

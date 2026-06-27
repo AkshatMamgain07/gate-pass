@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { requireRole } from '@/lib/auth'
 import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, formatDateTime, isOverdue } from '@/lib/gatepass'
 
 interface GatePass {
@@ -39,8 +40,10 @@ export default function SecurityPage() {
 
     useEffect(() => {
         const init = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session) return router.push('/login')
+            // This is the CISF / security checkpoint portal — only
+            // security staff and admins should ever land here.
+            const profile = await requireRole(['security', 'admin'], router, '/dashboard')
+            if (!profile) return
             await fetchLists()
         }
         init()

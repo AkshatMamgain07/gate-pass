@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { requireRole } from '@/lib/auth'
 import { sendNotification } from '@/lib/notifications'
 import { PASS_TYPE_COLORS, PASS_TYPE_LABELS } from '@/lib/gatepass'
 
@@ -28,17 +29,21 @@ export default function ApprovalsPage() {
     const [actionLoading, setActionLoading] = useState(false)
 
     useEffect(() => {
-        fetchPendingApprovals()
+        const init = async () => {
+            // Only people who actually approve gate passes should see this
+            // queue — a 'user' or 'vendor' account has no business here.
+            const profile = await requireRole(['approver', 'admin'], router)
+            if (!profile) return
+            await fetchPendingApprovals(profile.id)
+        }
+        init()
     }, [])
 
-    const fetchPendingApprovals = async () => {
-        const { data: { session } } = await supabase.auth.getSession()
-        if (!session) return router.push('/login')
-
+    const fetchPendingApprovals = async (approverId: string) => {
         const { data } = await supabase
             .from('gate_passes')
             .select('*')
-            .eq('approver_id', session.user.id)
+            .eq('approver_id', approverId)
             .eq('status', 'pending')
             .order('created_at', { ascending: false })
 

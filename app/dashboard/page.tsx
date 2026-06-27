@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { requireRole } from '@/lib/auth'
 import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, isOverdue } from '@/lib/gatepass'
 
 interface GatePass {
@@ -26,9 +27,13 @@ export default function DashboardPage() {
 
     useEffect(() => {
         const fetchData = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session) return router.push('/login')
-            setEmail(session.user.email || '')
+            // Vendors have their own portal at /vendor/dashboard — this
+            // internal dashboard shows every gate pass in the company, so
+            // vendor accounts must not be able to see it.
+            const profile = await requireRole(['user', 'approver', 'security', 'admin'], router, '/vendor/dashboard')
+            if (!profile) return
+
+            setEmail(profile.email)
 
             const { data } = await supabase
                 .from('gate_passes')

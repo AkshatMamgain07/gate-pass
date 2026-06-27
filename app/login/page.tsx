@@ -54,6 +54,7 @@ export default function LoginPage() {
                                 type="email"
                                 placeholder="Enter your email"
                                 value={email}
+                                maxLength={100}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
@@ -67,6 +68,7 @@ export default function LoginPage() {
                                 type="password"
                                 placeholder="Enter your password"
                                 value={password}
+                                maxLength={64}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />

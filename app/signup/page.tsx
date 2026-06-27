@@ -1,15 +1,38 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 
+const ALLOWED_EMAIL_DOMAINS = ['gmail.com', 'outlook.com']
+const NAME_MAX = 60
+const EMAIL_MAX = 100
+const PASSWORD_MAX = 64
+
+function getPasswordStrength(password: string) {
+    if (!password) return { score: 0, label: '', color: '' }
+
+    let score = 0
+    if (password.length >= 8) score++
+    if (password.length >= 12) score++
+    if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
+    if (/\d/.test(password)) score++
+    if (/[^A-Za-z0-9]/.test(password)) score++
+
+    if (score <= 1) return { score: 1, label: 'Weak', color: 'bg-red-500' }
+    if (score <= 3) return { score: 2, label: 'Medium', color: 'bg-amber-500' }
+    return { score: 3, label: 'Strong', color: 'bg-emerald-500' }
+}
+
+function isAllowedEmail(email: string) {
+    const domain = email.split('@')[1]?.toLowerCase()
+    return !!domain && ALLOWED_EMAIL_DOMAINS.includes(domain)
+}
+
 export default function SignupPage() {
     const [fullName, setFullName] = useState('')
     const [email, setEmail] = useState('')
-    const [department, setDepartment] = useState('')
-    const [phone, setPhone] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
     const [error, setError] = useState('')
@@ -17,19 +40,30 @@ export default function SignupPage() {
     const [loading, setLoading] = useState(false)
 
     const router = useRouter()
+    const strength = useMemo(() => getPasswordStrength(password), [password])
 
     const handleSignup = async () => {
         setError('')
         setSuccess('')
 
-        if (password !== confirmPassword) {
-            setError("Passwords don't match")
-            return
+        if (!fullName.trim() || fullName.trim().length < 2) {
+            return setError('Please enter your full name')
         }
 
-        if (password.length < 6) {
-            setError('Password must be at least 6 characters')
-            return
+        if (!isAllowedEmail(email)) {
+            return setError('Please use a Gmail or Outlook email address')
+        }
+
+        if (password.length < 8) {
+            return setError('Password must be at least 8 characters')
+        }
+
+        if (strength.score < 2) {
+            return setError('Please choose a stronger password (mix letters, numbers, symbols)')
+        }
+
+        if (password !== confirmPassword) {
+            return setError("Passwords don't match")
         }
 
         setLoading(true)
@@ -37,6 +71,9 @@ export default function SignupPage() {
         const { data: authData, error: authError } = await supabase.auth.signUp({
             email,
             password,
+            options: {
+                data: { full_name: fullName.trim() },
+            },
         })
 
         if (authError) {
@@ -51,14 +88,18 @@ export default function SignupPage() {
             return
         }
 
-        const { error: profileError } = await supabase.from('profiles').insert({
-            id: authData.user.id,
-            email,
-            full_name: fullName,
-            department,
-            phone,
-            role: 'user',
-        })
+        // Use upsert instead of insert: if a database trigger already created
+        // a profile row for this auth user (common Supabase pattern), insert()
+        // throws "duplicate key value violates unique constraint profiles_pkey".
+        // upsert() updates that row instead of failing.
+        const { error: profileError } = await supabase
+            .from('profiles')
+            .upsert({
+                id: authData.user.id,
+                email,
+                full_name: fullName.trim(),
+                role: 'user',
+            }, { onConflict: 'id' })
 
         setLoading(false)
 
@@ -94,6 +135,7 @@ export default function SignupPage() {
                                 type="text"
                                 placeholder="Akshat Mamgain"
                                 value={fullName}
+                                maxLength={NAME_MAX}
                                 onChange={(e) => setFullName(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
@@ -105,37 +147,15 @@ export default function SignupPage() {
                             </label>
                             <input
                                 type="email"
-                                placeholder="you@bhelhwr.co.in"
+                                placeholder="you@gmail.com"
                                 value={email}
+                                maxLength={EMAIL_MAX}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm text-gray-700 mb-2">
-                                Department
-                            </label>
-                            <input
-                                type="text"
-                                placeholder="e.g. Stores, Maintenance"
-                                value={department}
-                                onChange={(e) => setDepartment(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm text-gray-700 mb-2">
-                                Phone Number
-                            </label>
-                            <input
-                                type="tel"
-                                placeholder="9876543210"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
-                            />
+                            <p className="text-xs text-gray-400 mt-1.5">
+                                Only Gmail or Outlook addresses are accepted
+                            </p>
                         </div>
 
                         <div>
@@ -146,9 +166,28 @@ export default function SignupPage() {
                                 type="password"
                                 placeholder="Enter your password"
                                 value={password}
+                                maxLength={PASSWORD_MAX}
                                 onChange={(e) => setPassword(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
+                            {password && (
+                                <div className="mt-2">
+                                    <div className="flex gap-1.5">
+                                        {[1, 2, 3].map(i => (
+                                            <div
+                                                key={i}
+                                                className={`h-1.5 flex-1 rounded-full transition ${i <= strength.score ? strength.color : 'bg-gray-200'
+                                                    }`}
+                                            />
+                                        ))}
+                                    </div>
+                                    <p className={`text-xs mt-1 ${strength.score === 1 ? 'text-red-600' :
+                                        strength.score === 2 ? 'text-amber-600' : 'text-emerald-600'
+                                        }`}>
+                                        {strength.label}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         <div>
@@ -159,6 +198,7 @@ export default function SignupPage() {
                                 type="password"
                                 placeholder="Re-enter your password"
                                 value={confirmPassword}
+                                maxLength={PASSWORD_MAX}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition"
                             />
