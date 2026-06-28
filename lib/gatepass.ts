@@ -15,14 +15,16 @@ export interface Material {
 // the material is expected to come back (returnable) or not.
 export type PassType = 'returnable' | 'non_returnable'
 
+// "Stamp" styling: outline badges for in-progress states, a solid filled
+// badge only for "completed" (closed-file feel, like a case being sealed).
 export const STATUS_COLORS: Record<string, string> = {
-    pending: 'bg-amber-50 text-amber-700 border-amber-200',
-    approved: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    rejected: 'bg-red-50 text-red-700 border-red-200',
-    cancelled: 'bg-gray-100 text-gray-500 border-gray-200',
-    exited: 'bg-blue-50 text-blue-700 border-blue-200',
-    overdue: 'bg-orange-50 text-orange-700 border-orange-300',
-    completed: 'bg-violet-50 text-violet-700 border-violet-200',
+    pending: 'bg-gp-amber/10 text-gp-amber border-gp-amber/40',
+    approved: 'bg-gp-forest/10 text-gp-forest border-gp-forest/40',
+    rejected: 'bg-gp-rust/10 text-gp-rust border-gp-rust/40',
+    cancelled: 'bg-gp-steel/10 text-gp-steel border-gp-steel/30',
+    exited: 'bg-gp-navy/10 text-gp-navy border-gp-navy/30',
+    overdue: 'bg-gp-rust/15 text-gp-rust border-gp-rust/60',
+    completed: 'bg-gp-navy text-gp-paper border-gp-navy',
 }
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -36,8 +38,8 @@ export const STATUS_LABELS: Record<string, string> = {
 }
 
 export const PASS_TYPE_COLORS: Record<string, string> = {
-    returnable: 'bg-sky-50 text-sky-700 border-sky-200',
-    non_returnable: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
+    returnable: 'bg-gp-navy/5 text-gp-navy border-gp-navy/30',
+    non_returnable: 'bg-gp-steel/10 text-gp-steel border-gp-steel/30',
 }
 
 export const PASS_TYPE_LABELS: Record<string, string> = {
