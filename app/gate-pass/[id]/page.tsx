@@ -137,6 +137,30 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
         setActionLoading(false)
     }
 
+    const handleDownloadPdf = async () => {
+        const { data: { session } } = await supabase.auth.getSession()
+        if (!session) {
+            router.push('/login')
+            return
+        }
+        const res = await fetch(`/api/gate-pass/${id}/pdf`, {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+        })
+        if (!res.ok) {
+            alert('Could not download PDF — you may not have access to this gate pass.')
+            return
+        }
+        const blob = await res.blob()
+        const blobUrl = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = blobUrl
+        a.download = `gate-pass-${pass!.pass_number.replace(/\//g, '-')}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(blobUrl)
+    }
+
     if (loading) return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
             <p className="text-gray-500 text-lg">Loading...</p>
@@ -170,13 +194,12 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                             </div>
                         </div>
                         <div className="flex gap-2 flex-wrap w-full sm:w-auto">
-                            <a
-                                href={`/api/gate-pass/${id}/pdf`}
-                                target="_blank"
+                            <button
+                                onClick={() => handleDownloadPdf()}
                                 className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-700 text-white text-sm font-medium transition"
                             >
                                 📄 PDF
-                            </a>
+                            </button>
                             {canEdit && (
                                 <button
                                     onClick={() => router.push(`/gate-pass/${id}/edit`)}

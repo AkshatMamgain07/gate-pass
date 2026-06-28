@@ -27,9 +27,24 @@ export default function VendorRegisterPage() {
 
         setLoading(true)
 
+        // Pass role + company as signup metadata instead of updating
+        // `profiles` separately afterwards. If email confirmation is on,
+        // there's no session yet right after signUp() — any client write
+        // to `profiles` at that point is anonymous and RLS silently blocks
+        // it, leaving the account stuck as a default 'user'. The DB
+        // trigger (which creates the profile row) runs with elevated
+        // privileges and reads this metadata directly, so it sets the
+        // correct role no matter what the session state is.
         const { data: authData, error: signupError } = await supabase.auth.signUp({
             email,
             password,
+            options: {
+                data: {
+                    full_name: contactPerson,
+                    role: 'vendor',
+                    company: name,
+                },
+            },
         })
 
         if (signupError) {
@@ -52,11 +67,19 @@ export default function VendorRegisterPage() {
             return setError(vendorError.message)
         }
 
-        if (authData.user) {
+        // Best-effort sync only — the trigger is the source of truth for
+        // role/department now. This just makes the profile reflect the
+        // latest form values immediately when a session does exist.
+        if (authData.session && authData.user) {
             await supabase
                 .from('profiles')
-                .update({ role: 'vendor', full_name: contactPerson, department: name })
-                .eq('id', authData.user.id)
+                .upsert({
+                    id: authData.user.id,
+                    email,
+                    role: 'vendor',
+                    full_name: contactPerson,
+                    department: name,
+                }, { onConflict: 'id' })
         }
 
         await supabase.auth.signInWithPassword({ email, password })

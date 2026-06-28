@@ -13,9 +13,14 @@ const resend = new Resend(process.env.RESEND_API_KEY)
 // whose validity period (expiry_date) has passed, and which haven't
 // already been emailed about — then sends a reminder and marks them notified.
 export async function GET(req: NextRequest) {
-    // Optional shared-secret check so randoms on the internet can't trigger this.
+    // Fail CLOSED: if the secret isn't configured, refuse to run at all
+    // instead of silently allowing anyone on the internet to trigger this.
+    if (!process.env.CRON_SECRET) {
+        return NextResponse.json({ error: 'CRON_SECRET not configured on server' }, { status: 500 })
+    }
+
     const auth = req.headers.get('authorization')
-    if (process.env.CRON_SECRET && auth !== `Bearer ${process.env.CRON_SECRET}`) {
+    if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
         return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 

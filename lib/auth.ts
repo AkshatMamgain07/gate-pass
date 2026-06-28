@@ -66,3 +66,42 @@ export async function requireRole(
 
     return profile
 }
+/**
+ * Server-side equivalent of getCurrentProfile(), for use inside API routes.
+ * The browser sends the user's Supabase access token in the Authorization
+ * header; we verify it against Supabase Auth (not just trust it) and then
+ * look up the profile/role from the DB.
+ */
+export async function getAuthedRequestProfile(req: Request): Promise<AuthedProfile | null> {
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) return null
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token)
+    if (userErr || !userData?.user) return null
+
+    const { data: profile } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, role, department')
+        .eq('id', userData.user.id)
+        .single()
+
+    if (!profile) return null
+    return profile as AuthedProfile
+}
+
+/**
+ * Decides whether a given profile is allowed to view/act on a given gate pass.
+ * Admin and security can see everything (security needs it at the gate).
+ * Otherwise, only the person who created the pass or the approver assigned
+ * to it can access it.
+ */
+export function canAccessPass(
+    profile: AuthedProfile,
+    pass: { created_by: string; approver_id: string | null }
+): boolean {
+    if (profile.role === 'admin' || profile.role === 'security') return true
+    if (pass.created_by === profile.id) return true
+    if (pass.approver_id === profile.id) return true
+    return false
+}

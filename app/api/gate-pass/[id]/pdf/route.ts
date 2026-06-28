@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit'
 import { createClient } from '@supabase/supabase-js'
+import { getAuthedRequestProfile, canAccessPass } from '@/lib/auth'
 
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,6 +10,11 @@ const supabase = createClient(
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
 
+    const profile = await getAuthedRequestProfile(req)
+    if (!profile) {
+        return new Response('Unauthorized — please log in again.', { status: 401 })
+    }
+
     const { data: pass, error } = await supabase
         .from('gate_passes')
         .select('*')
@@ -17,6 +23,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     if (error || !pass) {
         return new Response('Gate pass not found', { status: 404 })
+    }
+
+    if (!canAccessPass(profile, pass)) {
+        return new Response('Forbidden — you do not have access to this gate pass.', { status: 403 })
     }
 
     const doc = new PDFDocument({ margin: 50 })
