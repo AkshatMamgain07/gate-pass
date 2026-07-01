@@ -16,11 +16,11 @@ interface GatePass {
     vehicle_number: string
     created_at: string
     expiry_date: string
+    created_by: string
 }
 
 const ROLE_LABELS: Record<string, string> = {
     user: 'Department User',
-    approver: 'Approver',
     security: 'Security Gate',
     admin: 'Administrator',
 }
@@ -33,20 +33,39 @@ export default function DashboardPage() {
     const [search, setSearch] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const router = useRouter()
+    const isAdmin = role === 'admin'
 
     useEffect(() => {
         const fetchData = async () => {
-            const profile = await requireRole(['user', 'approver', 'security', 'admin'], router, '/vendor/dashboard')
+            // Security has its own dedicated home (the gate verification
+            // screen) — it has no business on this dashboard, so bounce it
+            // straight there if someone lands here anyway.
+            const profile = await requireRole(['user', 'admin', 'security'], router, '/vendor/dashboard')
             if (!profile) return
+
+            if (profile.role === 'security') {
+                router.push('/security')
+                return
+            }
 
             setEmail(profile.email)
             setRole(profile.role)
 
-            const { data } = await supabase
+            // A department User only ever sees their own gate passes here —
+            // never the full register. Admin sees everything. This is a
+            // UI-level filter; the source of truth is the Supabase RLS
+            // policy on gate_passes, which should enforce the same rule
+            // server-side.
+            let query = supabase
                 .from('gate_passes')
                 .select('*')
                 .order('created_at', { ascending: false })
 
+            if (profile.role === 'user') {
+                query = query.eq('created_by', profile.id)
+            }
+
+            const { data } = await query
             setPasses(data || [])
             setLoading(false)
         }
@@ -90,8 +109,12 @@ export default function DashboardPage() {
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
                         <div>
-                            <p className="text-[11px] uppercase tracking-[0.2em] text-gp-steel mb-1">Records Register</p>
-                            <h1 className="text-2xl sm:text-3xl font-heading font-semibold text-gp-ink">Gate Pass Dashboard</h1>
+                            <p className="text-[11px] uppercase tracking-[0.2em] text-gp-steel mb-1">
+                                {isAdmin ? 'Records Register' : 'Your Submissions'}
+                            </p>
+                            <h1 className="text-2xl sm:text-3xl font-heading font-semibold text-gp-ink">
+                                {isAdmin ? 'Gate Pass Dashboard' : 'My Gate Passes'}
+                            </h1>
                         </div>
                         <div className="flex gap-3 w-full sm:w-auto">
                             <button
@@ -100,32 +123,44 @@ export default function DashboardPage() {
                             >
                                 + New Gate Pass
                             </button>
-                            <button
-                                onClick={() => router.push('/security')}
-                                className="flex-1 sm:flex-none px-4 py-3 sm:py-2 rounded-sm border border-gp-navy/30 text-gp-navy hover:bg-gp-navy/5 font-medium transition text-sm"
-                            >
-                                Security Gate
-                            </button>
+                            {isAdmin && (
+                                <>
+                                    <button
+                                        onClick={() => router.push('/security')}
+                                        className="flex-1 sm:flex-none px-4 py-3 sm:py-2 rounded-sm border border-gp-navy/30 text-gp-navy hover:bg-gp-navy/5 font-medium transition text-sm"
+                                    >
+                                        Security Gate
+                                    </button>
+                                    <button
+                                        onClick={() => router.push('/admin')}
+                                        className="flex-1 sm:flex-none px-4 py-3 sm:py-2 rounded-sm border border-gp-navy/30 text-gp-navy hover:bg-gp-navy/5 font-medium transition text-sm"
+                                    >
+                                        Admin Panel
+                                    </button>
+                                </>
+                            )}
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 mb-6">
-                        {[
-                            { label: 'Total', value: stats.total, text: 'text-gp-ink', accent: 'bg-gp-steel' },
-                            { label: 'Pending', value: stats.pending, text: 'text-gp-amber', accent: 'bg-gp-amber' },
-                            { label: 'Approved', value: stats.approved, text: 'text-gp-forest', accent: 'bg-gp-forest' },
-                            { label: 'Out (Exited)', value: stats.out, text: 'text-gp-navy', accent: 'bg-gp-navy' },
-                            { label: 'Overdue', value: stats.overdue, text: 'text-gp-rust', accent: 'bg-gp-rust' },
-                        ].map(stat => (
-                            <div key={stat.label} className="bg-card border border-gp-line rounded-sm overflow-hidden">
-                                <div className={`h-1 ${stat.accent}`} />
-                                <div className="p-3 sm:p-4">
-                                    <p className="text-gp-steel text-[11px] uppercase tracking-wide">{stat.label}</p>
-                                    <p className={`text-2xl sm:text-3xl font-heading font-semibold mt-1 ${stat.text}`}>{stat.value}</p>
+                    {isAdmin && (
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 sm:gap-4 mb-6">
+                            {[
+                                { label: 'Total', value: stats.total, text: 'text-gp-ink', accent: 'bg-gp-steel' },
+                                { label: 'Pending', value: stats.pending, text: 'text-gp-amber', accent: 'bg-gp-amber' },
+                                { label: 'Approved', value: stats.approved, text: 'text-gp-forest', accent: 'bg-gp-forest' },
+                                { label: 'Out (Exited)', value: stats.out, text: 'text-gp-navy', accent: 'bg-gp-navy' },
+                                { label: 'Overdue', value: stats.overdue, text: 'text-gp-rust', accent: 'bg-gp-rust' },
+                            ].map(stat => (
+                                <div key={stat.label} className="bg-card border border-gp-line rounded-sm overflow-hidden">
+                                    <div className={`h-1 ${stat.accent}`} />
+                                    <div className="p-3 sm:p-4">
+                                        <p className="text-gp-steel text-[11px] uppercase tracking-wide">{stat.label}</p>
+                                        <p className={`text-2xl sm:text-3xl font-heading font-semibold mt-1 ${stat.text}`}>{stat.value}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    )}
 
                     <div className="flex flex-col sm:flex-row gap-3 mb-4">
                         <input
@@ -153,8 +188,12 @@ export default function DashboardPage() {
 
                     {filtered.length === 0 ? (
                         <div className="bg-card border border-gp-line rounded-sm text-center py-14 text-gp-steel">
-                            <p className="text-sm uppercase tracking-wide">No gate passes found</p>
-                            <p className="text-xs mt-2 text-gp-steel/70">Try adjusting your search or filter above.</p>
+                            <p className="text-sm uppercase tracking-wide">
+                                {isAdmin ? 'No gate passes found' : "You haven't created any gate passes yet"}
+                            </p>
+                            <p className="text-xs mt-2 text-gp-steel/70">
+                                {isAdmin ? 'Try adjusting your search or filter above.' : 'Use the "+ New Gate Pass" button above to create one.'}
+                            </p>
                         </div>
                     ) : (
                         <>

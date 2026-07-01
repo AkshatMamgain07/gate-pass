@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { use } from 'react'
 import { supabase } from '@/lib/supabase'
 import { sendNotification } from '@/lib/notifications'
+import { canAccessPass } from '@/lib/auth'
 import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, formatDateTime, isOverdue } from '@/lib/gatepass'
 import { PortalHeader } from '@/components/PortalHeader'
 
@@ -24,6 +25,8 @@ interface GatePass {
     invoice_date: string
     invoice_url: string
     created_at: string
+    created_by: string
+    approver_id: string | null
     approved_at: string
     expiry_date: string
     exited_at: string
@@ -40,6 +43,7 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
     const [pass, setPass] = useState<GatePass | null>(null)
     const [loading, setLoading] = useState(true)
     const [userRole, setUserRole] = useState('')
+    const [viewerId, setViewerId] = useState('')
     const [rejectionReason, setRejectionReason] = useState('')
     const [showRejectInput, setShowRejectInput] = useState(false)
     const [expiryDate, setExpiryDate] = useState('')
@@ -53,17 +57,29 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
 
             const { data: profile } = await supabase
                 .from('profiles')
-                .select('role')
+                .select('id, role')
                 .eq('id', session.user.id)
                 .single()
 
             setUserRole(profile?.role || 'user')
+            setViewerId(session.user.id)
 
             const { data } = await supabase
                 .from('gate_passes')
                 .select('*')
                 .eq('id', id)
                 .single()
+
+            if (!data) return router.push('/dashboard')
+
+            // Belt-and-suspenders on top of RLS: a department User should
+            // only ever be able to open a pass they created themselves.
+            // Admin and Security can open any pass (Security needs it to
+            // verify at the gate).
+            if (profile && !canAccessPass(profile as any, data)) {
+                router.push('/dashboard')
+                return
+            }
 
             setPass(data)
             setLoading(false)
@@ -181,7 +197,8 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
 
     const overdue = isOverdue(pass)
     const effStatus = overdue ? 'overdue' : pass.status
-    const canEdit = EDITABLE_STATUSES.includes(pass.status) && (pass.status === 'pending' || userRole === 'admin')
+    const canEdit = EDITABLE_STATUSES.includes(pass.status) &&
+        (userRole === 'admin' || (pass.status === 'pending' && pass.created_by === viewerId))
 
     return (
         <main className="min-h-screen bg-gp-paper flex flex-col">

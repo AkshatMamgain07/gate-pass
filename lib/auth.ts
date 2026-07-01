@@ -1,5 +1,9 @@
 import { supabase } from '@/lib/supabase'
 
+// 'approver' and 'vendor' are legacy/separate: 'approver' is no longer
+// assignable or used in access checks (approval duties now live entirely
+// with 'admin'), kept here only so old rows in the DB still type-check.
+// 'vendor' has its own separate portal/login flow.
 export type Role = 'user' | 'approver' | 'security' | 'admin' | 'vendor'
 
 export interface AuthedProfile {

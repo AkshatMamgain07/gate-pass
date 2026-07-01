@@ -19,7 +19,7 @@ interface Vendor {
     is_approved: boolean
 }
 
-const ROLES = ['user', 'approver', 'security', 'admin']
+const ROLES = ['user', 'security', 'admin']
 
 export default function AdminPage() {
     const router = useRouter()

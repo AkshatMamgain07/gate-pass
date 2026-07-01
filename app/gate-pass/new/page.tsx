@@ -49,8 +49,8 @@ export default function NewGatePassPage() {
     useEffect(() => {
         const init = async () => {
             // Vendors and security staff don't raise gate passes — only
-            // internal staff (user/approver/admin) should reach this form.
-            const p = await requireRole(['user', 'approver', 'admin'], router)
+            // internal staff (user/admin) should reach this form.
+            const p = await requireRole(['user', 'admin'], router)
             if (!p) return
             setProfile(p)
 

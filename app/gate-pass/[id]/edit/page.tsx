@@ -5,8 +5,8 @@ import { use } from 'react'
 import { supabase } from '@/lib/supabase'
 import { UNITS, PassType, Material } from '@/lib/gatepass'
 
-// Edit is allowed for 'pending' (anyone who can see it) and 'approved'
-// (admin/approver only, since it has already gone through approval).
+// Edit is allowed for 'pending' (only by the creator or an admin) and
+// 'approved' (admin only, since it has already gone through approval).
 const EDITABLE_STATUSES = ['pending', 'approved']
 
 export default function EditGatePassPage({ params }: { params: Promise<{ id: string }> }) {
@@ -56,7 +56,16 @@ export default function EditGatePassPage({ params }: { params: Promise<{ id: str
             }
 
             if (data.status === 'approved' && (profile?.role || 'user') !== 'admin') {
-                alert('Only an admin/approver can edit a gate pass that is already approved.')
+                alert('Only an admin can edit a gate pass that is already approved.')
+                return router.push(`/gate-pass/${id}`)
+            }
+
+            if (
+                data.status === 'pending' &&
+                data.created_by !== session.user.id &&
+                (profile?.role || 'user') !== 'admin'
+            ) {
+                alert('You can only edit gate passes you created yourself.')
                 return router.push(`/gate-pass/${id}`)
             }
 
