@@ -214,12 +214,6 @@ export default function LoginPage() {
                     <p className="text-center text-[11px] text-gp-steel/70 mt-6 tracking-wide">
                         Material Gate Pass System — Internal Use Only
                     </p>
-                    <p className="text-center text-[11px] text-gp-steel/70 mt-2 tracking-wide">
-                        Security Staff?{' '}
-                        <Link href="/security/register" className="text-gp-navy hover:text-gp-amber underline underline-offset-2">
-                            Register here
-                        </Link>
-                    </p>
                 </div>
             </div>
         </main>
