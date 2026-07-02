@@ -73,7 +73,7 @@ export default function SignupPage() {
             email,
             password,
             options: {
-                data: { full_name: fullName.trim() },
+                data: { full_name: fullName.trim(), role: 'user' },
             },
         })
 
