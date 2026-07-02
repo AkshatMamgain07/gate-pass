@@ -31,7 +31,12 @@ function isAllowedEmail(email: string) {
     return !!domain && ALLOWED_EMAIL_DOMAINS.includes(domain)
 }
 
-export default function SignupPage() {
+// This page is a near-duplicate of /signup, with one deliberate difference:
+// accounts created here get role: 'security' instead of role: 'user'. Kept
+// as a separate route (rather than a toggle on /signup) so the two flows
+// can never be visually or logically conflated, and so a plain department
+// user can't accidentally end up with gate-verification access.
+export default function SecurityRegisterPage() {
     const [fullName, setFullName] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
@@ -96,17 +101,17 @@ export default function SignupPage() {
                     id: authData.user.id,
                     email,
                     full_name: fullName.trim(),
-                    role: 'user',
+                    role: 'security',
                 }, { onConflict: 'id' })
         }
 
         setLoading(false)
         setSuccess(
             authData.session
-                ? 'Account created!'
-                : 'Account created! Check your email to verify, then log in.'
+                ? 'Security account created!'
+                : 'Security account created! Check your email to verify, then log in from the Security tab.'
         )
-        setTimeout(() => router.push(authData.session ? '/dashboard' : '/login'), 1500)
+        setTimeout(() => router.push(authData.session ? '/security' : '/login'), 1500)
     }
 
     return (
@@ -120,11 +125,15 @@ export default function SignupPage() {
                         <div className="p-8">
                             <div className="mb-8">
                                 <p className="text-[11px] uppercase tracking-[0.2em] text-gp-steel mb-1">
-                                    New Registration
+                                    Security Staff Registration
                                 </p>
                                 <h1 className="text-2xl font-heading font-semibold text-gp-ink">
-                                    Create your account
+                                    Register a security account
                                 </h1>
+                                <p className="text-sm text-gp-steel mt-2">
+                                    For gate security personnel only. This account will be able to
+                                    verify and act on approved gate passes at the gate.
+                                </p>
                             </div>
 
                             <div className="space-y-5">
@@ -134,7 +143,7 @@ export default function SignupPage() {
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="Akshat Mamgain"
+                                        placeholder="Full name"
                                         value={fullName}
                                         maxLength={NAME_MAX}
                                         onChange={(e) => setFullName(e.target.value)}
@@ -223,14 +232,14 @@ export default function SignupPage() {
                                     disabled={loading}
                                     className="w-full py-3 rounded-sm bg-gp-navy hover:bg-gp-navy-deep disabled:bg-gp-navy/40 text-gp-paper font-semibold transition tracking-wide"
                                 >
-                                    {loading ? 'Creating account…' : 'Create Account'}
+                                    {loading ? 'Creating account…' : 'Register as Security'}
                                 </button>
                             </div>
 
                             <p className="text-center text-sm text-gp-steel mt-6">
-                                Already have an account?{' '}
-                                <Link href="/login" className="text-gp-navy hover:text-gp-amber font-medium underline-offset-2 hover:underline">
-                                    Sign in
+                                Not security staff?{' '}
+                                <Link href="/signup" className="text-gp-navy hover:text-gp-amber font-medium underline-offset-2 hover:underline">
+                                    Register as a regular user
                                 </Link>
                             </p>
                         </div>
@@ -238,12 +247,6 @@ export default function SignupPage() {
 
                     <p className="text-center text-[11px] text-gp-steel/70 mt-6 tracking-wide">
                         Material Gate Pass System — Internal Use Only
-                    </p>
-                    <p className="text-center text-[11px] text-gp-steel/70 mt-2 tracking-wide">
-                        Security Staff?{' '}
-                        <Link href="/security/register" className="text-gp-navy hover:text-gp-amber underline underline-offset-2">
-                            Register here
-                        </Link>
                     </p>
                 </div>
             </div>
