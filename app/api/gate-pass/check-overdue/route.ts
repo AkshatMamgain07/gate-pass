@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
+// This route runs as a scheduled cron job, not on behalf of any logged-in
+// user — there's no session/JWT to attach, so the anon key + RLS approach
+// used elsewhere doesn't apply here. It needs the service role key, which
+// bypasses RLS entirely. That's safe specifically because access to this
+// route is already gated by the CRON_SECRET check below; the service role
+// key itself must never be exposed to the browser or committed to the repo.
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -17,6 +23,10 @@ export async function GET(req: NextRequest) {
     // instead of silently allowing anyone on the internet to trigger this.
     if (!process.env.CRON_SECRET) {
         return NextResponse.json({ error: 'CRON_SECRET not configured on server' }, { status: 500 })
+    }
+
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        return NextResponse.json({ error: 'SUPABASE_SERVICE_ROLE_KEY not configured on server' }, { status: 500 })
     }
 
     const auth = req.headers.get('authorization')
