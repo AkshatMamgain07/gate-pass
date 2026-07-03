@@ -1,19 +1,14 @@
 import PDFDocument from 'pdfkit'
-import { createClient } from '@supabase/supabase-js'
-import { getAuthedRequestProfile, canAccessPass } from '@/lib/auth'
-
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
+import { getAuthedRequestContext, canAccessPass } from '@/lib/auth'
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
     const { id } = await params
 
-    const profile = await getAuthedRequestProfile(req)
-    if (!profile) {
+    const ctx = await getAuthedRequestContext(req)
+    if (!ctx) {
         return new Response('Unauthorized — please log in again.', { status: 401 })
     }
+    const { profile, client: supabase } = ctx
 
     const { data: pass, error } = await supabase
         .from('gate_passes')

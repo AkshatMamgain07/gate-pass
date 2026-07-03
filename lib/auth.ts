@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 // 'approver' and 'vendor' are legacy/separate: 'approver' is no longer
 // assignable or used in access checks (approval duties now live entirely
@@ -70,28 +71,54 @@ export async function requireRole(
 
     return profile
 }
+
 /**
  * Server-side equivalent of getCurrentProfile(), for use inside API routes.
  * The browser sends the user's Supabase access token in the Authorization
  * header; we verify it against Supabase Auth (not just trust it) and then
  * look up the profile/role from the DB.
+ *
+ * Returns both the profile AND a request-scoped Supabase client that has
+ * the caller's access token attached. This matters because the module-level
+ * `supabase` client (imported above) has no session in an API route context
+ * — every query it makes is RLS-anonymous, i.e. auth.uid() resolves to
+ * null. Using that client for any RLS-protected table (profiles,
+ * gate_passes, ...) silently returns zero rows even for a legitimate,
+ * fully-authorized caller. Route handlers should use the returned `client`
+ * for all further queries in that request, not the shared `supabase` import.
  */
-export async function getAuthedRequestProfile(req: Request): Promise<AuthedProfile | null> {
+export async function getAuthedRequestContext(req: Request): Promise<{ profile: AuthedProfile; client: SupabaseClient } | null> {
     const authHeader = req.headers.get('authorization') || ''
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
     if (!token) return null
 
-    const { data: userData, error: userErr } = await supabase.auth.getUser(token)
+    const client = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        { global: { headers: { Authorization: `Bearer ${token}` } } }
+    )
+
+    const { data: userData, error: userErr } = await client.auth.getUser(token)
     if (userErr || !userData?.user) return null
 
-    const { data: profile } = await supabase
+    const { data: profile } = await client
         .from('profiles')
         .select('id, email, full_name, role, department')
         .eq('id', userData.user.id)
         .single()
 
     if (!profile) return null
-    return profile as AuthedProfile
+    return { profile: profile as AuthedProfile, client }
+}
+
+/**
+ * Backwards-compatible wrapper — same as before, but now backed by a
+ * request-scoped authenticated client internally so the profile lookup
+ * itself actually passes RLS.
+ */
+export async function getAuthedRequestProfile(req: Request): Promise<AuthedProfile | null> {
+    const ctx = await getAuthedRequestContext(req)
+    return ctx?.profile ?? null
 }
 
 /**

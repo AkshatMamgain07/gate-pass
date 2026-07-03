@@ -21,6 +21,7 @@ interface GatePass {
     expiry_date: string
     exited_at: string
     returned_at: string
+    gate_reject_reason: string | null
 }
 
 export default function SecurityPage() {
@@ -124,6 +125,7 @@ export default function SecurityPage() {
                 status: newStatus,
                 exited_at: new Date().toISOString(),
                 exit_verified_by: session?.user.id,
+                gate_reject_reason: null,
             })
             .eq('id', pass.id)
 
@@ -133,7 +135,7 @@ export default function SecurityPage() {
             action: 'gate_exit_approved',
         })
 
-        setPass(prev => prev ? { ...prev, status: newStatus, exited_at: new Date().toISOString() } : null)
+        setPass(prev => prev ? { ...prev, status: newStatus, exited_at: new Date().toISOString(), gate_reject_reason: null } : null)
         setActionLoading(false)
         fetchLists()
     }
@@ -155,6 +157,7 @@ export default function SecurityPage() {
             metadata: { reason: denyReason },
         })
 
+        setPass(prev => prev ? { ...prev, gate_reject_reason: denyReason } : null)
         setShowDenyInput(null)
         setDenyReason('')
         setActionLoading(false)
@@ -171,6 +174,7 @@ export default function SecurityPage() {
                 status: 'completed',
                 returned_at: new Date().toISOString(),
                 return_verified_by: session?.user.id,
+                gate_reject_reason: null,
             })
             .eq('id', pass.id)
 
@@ -180,7 +184,7 @@ export default function SecurityPage() {
             action: 'gate_return_approved',
         })
 
-        setPass(prev => prev ? { ...prev, status: 'completed', returned_at: new Date().toISOString() } : null)
+        setPass(prev => prev ? { ...prev, status: 'completed', returned_at: new Date().toISOString(), gate_reject_reason: null } : null)
         setActionLoading(false)
         fetchLists()
     }
@@ -202,6 +206,7 @@ export default function SecurityPage() {
             metadata: { reason: denyReason },
         })
 
+        setPass(prev => prev ? { ...prev, gate_reject_reason: denyReason } : null)
         setShowDenyInput(null)
         setDenyReason('')
         setActionLoading(false)
@@ -330,6 +335,11 @@ export default function SecurityPage() {
 
                         {pass.status === 'approved' && (
                             <div>
+                                {pass.gate_reject_reason && (
+                                    <p className="text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
+                                        ✕ Exit was denied at the gate — <span className="font-medium">{pass.gate_reject_reason}</span>. Re-check and approve once resolved.
+                                    </p>
+                                )}
                                 <p className="text-sm text-gray-600 mb-3">Verify vehicle, driver and materials match this pass, then:</p>
                                 <div className="flex gap-3">
                                     <button
@@ -372,6 +382,11 @@ export default function SecurityPage() {
                                 {overdue && (
                                     <p className="text-orange-700 text-sm bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3">
                                         ⚠️ This material is overdue for return.
+                                    </p>
+                                )}
+                                {pass.gate_reject_reason && (
+                                    <p className="text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
+                                        ✕ Return was flagged — <span className="font-medium">{pass.gate_reject_reason}</span>. Re-check and confirm once resolved.
                                     </p>
                                 )}
                                 <p className="text-sm text-gray-600 mb-3">Material is out. When it comes back through the gate:</p>
@@ -462,7 +477,6 @@ export default function SecurityPage() {
                 </div>
 
             </div>
-        </main >
+        </main>
     )
 }
-
