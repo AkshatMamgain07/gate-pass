@@ -49,11 +49,18 @@ export const PASS_TYPE_LABELS: Record<string, string> = {
 
 export async function generatePassNumber() {
     const year = new Date().getFullYear()
+    // Order by pass_number itself, not created_at. created_at can be out
+    // of sync with the numeric sequence (e.g. migrated/legacy rows, clock
+    // skew, or rows inserted in a different order than they were
+    // logically issued), which previously caused this to regenerate a
+    // number that already existed. Since the numeric part is zero-padded
+    // to a fixed width, a plain string sort here is equivalent to a
+    // numeric sort and reliably finds the true highest number.
     const { data } = await supabase
         .from('gate_passes')
         .select('pass_number')
         .like('pass_number', `GP/${year}/%`)
-        .order('created_at', { ascending: false })
+        .order('pass_number', { ascending: false })
         .limit(1)
 
     const lastNum = data?.[0]?.pass_number?.split('/')[2] || '0'
