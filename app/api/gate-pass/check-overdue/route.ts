@@ -14,10 +14,22 @@ const supabase = createClient(
 )
 const resend = new Resend(process.env.RESEND_API_KEY)
 
-// Vercel Cron (or any external scheduler) hits this once a day.
-// It finds returnable gate passes whose material has exited the gate,
-// whose validity period (expiry_date) has passed, and which haven't
-// already been emailed about — then sends a reminder and marks them notified.
+// How many days a pass has to stay overdue, unreturned, before Security
+// gets pulled in. Before this existed, materials could sit overdue for
+// days with nobody but the (unresponsive) creator ever being told —
+// Security only found out when they happened to notice or someone
+// mentioned it in person.
+const ESCALATION_DAYS = 3
+
+// Vercel Cron hits this once a day.
+//
+// Stage 1 — first time a returnable pass's material is found overdue
+// (exited, past its expiry_date, never reminded before): email the
+// person who created the pass, asking them to return it.
+//
+// Stage 2 — if a pass is *still* overdue ESCALATION_DAYS after that first
+// reminder (i.e. the creator didn't act), email every Security account so
+// they can chase it down directly, instead of only finding out days later.
 export async function GET(req: NextRequest) {
     // Fail CLOSED: if the secret isn't configured, refuse to run at all
     // instead of silently allowing anyone on the internet to trigger this.
@@ -35,41 +47,39 @@ export async function GET(req: NextRequest) {
     }
 
     const nowISO = new Date().toISOString()
+    const escalationCutoffISO = new Date(Date.now() - ESCALATION_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`
 
-    const { data: overduePasses, error } = await supabase
+    let reminded = 0
+    let escalated = 0
+
+    // --- Stage 1: initial reminder to the creator ---
+    const { data: newlyOverdue, error: stage1Error } = await supabase
         .from('gate_passes')
-        .select('*, approver:profiles!approver_id(*), creator:profiles!created_by(*)')
+        .select('*, creator:profiles!created_by(*)')
         .eq('type', 'returnable')
         .eq('status', 'exited')
         .eq('overdue_notified', false)
         .lt('expiry_date', nowISO)
 
-    if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+    if (stage1Error) {
+        return NextResponse.json({ error: stage1Error.message }, { status: 500 })
     }
 
-    if (!overduePasses || overduePasses.length === 0) {
-        return NextResponse.json({ checked: 0, notified: 0 })
-    }
-
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || `https://${process.env.VERCEL_URL}`
-    let notified = 0
-
-    for (const pass of overduePasses) {
-        const recipients = [pass.creator?.email, pass.approver?.email].filter(Boolean) as string[]
+    for (const pass of newlyOverdue || []) {
         const url = `${appUrl}/gate-pass/${pass.id}`
 
-        for (const to of recipients) {
+        if (pass.creator?.email) {
             try {
                 await resend.emails.send({
                     from: 'Gate Pass System <onboarding@resend.dev>',
-                    to,
-                    subject: `Reminder: Material Not Yet Returned – ${pass.pass_number}`,
+                    to: pass.creator.email,
+                    subject: `Reminder: Please Return Material – ${pass.pass_number}`,
                     html: `
                         <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
-                            <h2>Hi,</h2>
-                            <p>The material sent out on returnable gate pass <strong>${pass.pass_number}</strong> was due back on <strong>${new Date(pass.expiry_date).toLocaleDateString('en-IN')}</strong> and has not yet been marked returned at the gate.</p>
-                            <p>Please follow up so the material can be returned, or the gate pass updated.</p>
+                            <h2>Hi ${pass.creator.full_name || ''},</h2>
+                            <p>The material sent out on your returnable gate pass <strong>${pass.pass_number}</strong> was due back on <strong>${new Date(pass.expiry_date).toLocaleDateString('en-IN')}</strong> and has not yet been marked returned at the gate.</p>
+                            <p>Please return it at the gate as soon as possible.</p>
                             <p>
                                 <a href="${url}" style="display:inline-block; padding: 10px 20px; background:#2563eb; color:#fff; text-decoration:none; border-radius:8px;">
                                     View Gate Pass
@@ -100,8 +110,83 @@ export async function GET(req: NextRequest) {
             console.error('Could not write overdue activity log (non-blocking):', err)
         }
 
-        notified++
+        reminded++
     }
 
-    return NextResponse.json({ checked: overduePasses.length, notified })
+    // --- Stage 2: escalate to Security if still overdue after the cutoff ---
+    const { data: stillOverdue, error: stage2Error } = await supabase
+        .from('gate_passes')
+        .select('*, creator:profiles!created_by(*)')
+        .eq('type', 'returnable')
+        .eq('status', 'exited')
+        .eq('overdue_notified', true)
+        .eq('overdue_escalated', false)
+        .lt('expiry_date', escalationCutoffISO)
+
+    if (stage2Error) {
+        return NextResponse.json({ error: stage2Error.message }, { status: 500 })
+    }
+
+    if (stillOverdue && stillOverdue.length > 0) {
+        const { data: securityStaff } = await supabase
+            .from('profiles')
+            .select('email, full_name')
+            .eq('role', 'security')
+
+        for (const pass of stillOverdue) {
+            const url = `${appUrl}/gate-pass/${pass.id}`
+            const daysOverdue = Math.floor((Date.now() - new Date(pass.expiry_date).getTime()) / (24 * 60 * 60 * 1000))
+
+            for (const staff of securityStaff || []) {
+                if (!staff.email) continue
+                try {
+                    await resend.emails.send({
+                        from: 'Gate Pass System <onboarding@resend.dev>',
+                        to: staff.email,
+                        subject: `⚠ Overdue ${daysOverdue}+ Days – Follow Up Required – ${pass.pass_number}`,
+                        html: `
+                            <div style="font-family: sans-serif; max-width: 480px; margin: 0 auto;">
+                                <h2>Hi ${staff.full_name || ''},</h2>
+                                <p>Gate pass <strong>${pass.pass_number}</strong> has been overdue for <strong>${daysOverdue} days</strong> and the material still hasn't been returned. The person who created it (${pass.creator?.full_name || pass.creator?.email || 'unknown'}) was already reminded but hasn't acted.</p>
+                                <p>Please follow up directly.</p>
+                                <p>
+                                    <a href="${url}" style="display:inline-block; padding: 10px 20px; background:#dc2626; color:#fff; text-decoration:none; border-radius:8px;">
+                                        View Gate Pass
+                                    </a>
+                                </p>
+                                <p style="color:#888; font-size:12px; margin-top: 24px;">
+                                    Material Gate Pass System – BHEL Haridwar
+                                </p>
+                            </div>
+                        `,
+                    })
+                } catch (err) {
+                    console.error('Security escalation email failed:', err)
+                }
+            }
+
+            await supabase
+                .from('gate_passes')
+                .update({ overdue_escalated: true })
+                .eq('id', pass.id)
+
+            try {
+                await supabase.from('activity_logs').insert({
+                    gate_pass_id: pass.id,
+                    action: 'overdue_escalated_to_security',
+                    metadata: { days_overdue: daysOverdue },
+                })
+            } catch (err) {
+                console.error('Could not write escalation activity log (non-blocking):', err)
+            }
+
+            escalated++
+        }
+    }
+
+    return NextResponse.json({
+        checked: (newlyOverdue?.length || 0) + (stillOverdue?.length || 0),
+        reminded,
+        escalated,
+    })
 }
