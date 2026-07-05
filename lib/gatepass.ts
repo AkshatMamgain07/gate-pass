@@ -48,24 +48,17 @@ export const PASS_TYPE_LABELS: Record<string, string> = {
 }
 
 export async function generatePassNumber() {
-    const year = new Date().getFullYear()
-    // Order by pass_number itself, not created_at. created_at can be out
-    // of sync with the numeric sequence (e.g. migrated/legacy rows, clock
-    // skew, or rows inserted in a different order than they were
-    // logically issued), which previously caused this to regenerate a
-    // number that already existed. Since the numeric part is zero-padded
-    // to a fixed width, a plain string sort here is equivalent to a
-    // numeric sort and reliably finds the true highest number.
-    const { data } = await supabase
-        .from('gate_passes')
-        .select('pass_number')
-        .like('pass_number', `GP/${year}/%`)
-        .order('pass_number', { ascending: false })
-        .limit(1)
-
-    const lastNum = data?.[0]?.pass_number?.split('/')[2] || '0'
-    const nextNum = (parseInt(lastNum) + 1).toString().padStart(6, '0')
-    return `GP/${year}/${nextNum}`
+    // Delegates to a SECURITY DEFINER Postgres function that atomically
+    // increments a dedicated counter table. This replaces the old
+    // approach of reading the highest existing pass_number from
+    // gate_passes directly — that approach broke once RLS restricted a
+    // plain User's SELECT visibility to only their own passes, since it
+    // meant a User computed "next number" based only on rows *they*
+    // could see, not the true global maximum, causing constant
+    // duplicate-key collisions with passes created by other people.
+    const { data, error } = await supabase.rpc('next_gate_pass_number')
+    if (error) throw error
+    return data as string
 }
 
 // Each material line item gets its own Material ID, tied to the parent
