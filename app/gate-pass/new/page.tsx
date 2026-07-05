@@ -86,6 +86,12 @@ export default function NewGatePassPage() {
     }
 
     const handleSubmit = async () => {
+        // Guard against a fast double-click/double-tap firing this twice
+        // before React re-renders the disabled button — without this, two
+        // near-simultaneous submissions can both read the same "last pass
+        // number" and collide on insert.
+        if (loading) return
+
         setError('')
         setLoading(true)
 
@@ -99,9 +105,6 @@ export default function NewGatePassPage() {
 
         try {
             if (!profile) return setError('Session expired, please log in again.'), setLoading(false)
-
-            const passNumber = await generatePassNumber()
-            const materialsWithIds = buildMaterialsWithIds(materials, passNumber)
 
             let invoiceUrl = ''
             if (invoiceFile) {
@@ -119,28 +122,52 @@ export default function NewGatePassPage() {
 
             const approverId = await assignApprover(department)
 
-            const { data: gatePass, error: insertError } = await supabase
-                .from('gate_passes')
-                .insert({
-                    pass_number: passNumber,
-                    type: passType,
-                    status: 'pending',
-                    created_by: profile.id,
-                    department,
-                    from_location: fromLocation,
-                    to_location: toLocation,
-                    vendor_id: vendorId || null,
-                    vehicle_number: vehicleNumber,
-                    driver_name: driverName,
-                    driver_phone: driverPhone,
-                    materials: materialsWithIds,
-                    invoice_number: invoiceNumber || null,
-                    invoice_date: invoiceDate || null,
-                    invoice_url: invoiceUrl || null,
-                    approver_id: approverId,
-                })
-                .select()
-                .single()
+            // Retry a few times if two people (or two near-simultaneous
+            // clicks) happen to land on the same generated pass number —
+            // the DB's unique constraint on pass_number is the real source
+            // of truth here; this loop just re-asks for a fresh number and
+            // tries again rather than surfacing a confusing DB error.
+            let gatePass: any = null
+            let insertError: any = null
+            for (let attempt = 0; attempt < 3; attempt++) {
+                const passNumber = await generatePassNumber()
+                const materialsWithIds = buildMaterialsWithIds(materials, passNumber)
+
+                const result = await supabase
+                    .from('gate_passes')
+                    .insert({
+                        pass_number: passNumber,
+                        type: passType,
+                        status: 'pending',
+                        created_by: profile.id,
+                        department,
+                        from_location: fromLocation,
+                        to_location: toLocation,
+                        vendor_id: vendorId || null,
+                        vehicle_number: vehicleNumber,
+                        driver_name: driverName,
+                        driver_phone: driverPhone,
+                        materials: materialsWithIds,
+                        invoice_number: invoiceNumber || null,
+                        invoice_date: invoiceDate || null,
+                        invoice_url: invoiceUrl || null,
+                        approver_id: approverId,
+                    })
+                    .select()
+                    .single()
+
+                if (!result.error) {
+                    gatePass = result.data
+                    insertError = null
+                    break
+                }
+
+                insertError = result.error
+                // Postgres unique_violation — retry with a fresh number.
+                // Any other error (validation, RLS, network) should not be
+                // retried, since retrying won't fix it.
+                if (result.error.code !== '23505') break
+            }
 
             if (insertError) throw insertError
 
@@ -152,7 +179,7 @@ export default function NewGatePassPage() {
 
             await sendNotification('created', gatePass.id)
 
-            setSuccess(`Gate Pass ${passNumber} created successfully!`)
+            setSuccess(`Gate Pass ${gatePass.pass_number} created successfully!`)
             setTimeout(() => router.push('/dashboard'), 2000)
 
         } catch (err: any) {
