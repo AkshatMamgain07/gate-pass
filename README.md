@@ -46,18 +46,4 @@ Material moving in or out of a manufacturing plant like BHEL needs a paper trail
 | **Security** | Gate checkpoint — verifies and clears passes for physical exit/return |
 | **Vendor** | Limited external portal for passes involving them |
 
-## Project Structure
 
-app/
-├── login/                # Role-based sign-in
-├── signup/               # Registration
-├── dashboard/            # User & Admin gate pass list
-├── gate-pass/
-│   ├── new/              # Create a gate pass
-│   └── [id]/             # View / edit a gate pass
-├── security/             # Security checkpoint verification screen
-├── admin/                # Admin-only management views
-├── vendor/               # Vendor portal
-└── api/                  # Route handlers (PDF export, email, overdue cron)
-components/                # Shared UI (PortalHeader, form primitives)
-lib/                       # Supabase client, auth helpers, business logic
