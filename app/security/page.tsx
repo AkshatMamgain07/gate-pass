@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { requireRole } from '@/lib/auth'
 import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, formatDateTime, isOverdue } from '@/lib/gatepass'
+import { PortalHeader } from '@/components/PortalHeader'
 
 interface GatePass {
     id: string
@@ -24,6 +25,12 @@ interface GatePass {
     gate_reject_reason: string | null
 }
 
+const ROLE_LABELS: Record<string, string> = {
+    user: 'Department User',
+    security: 'Security Gate',
+    admin: 'Administrator',
+}
+
 export default function SecurityPage() {
     const router = useRouter()
     const [searchTerm, setSearchTerm] = useState('')
@@ -34,6 +41,7 @@ export default function SecurityPage() {
     const [denyReason, setDenyReason] = useState('')
     const [showDenyInput, setShowDenyInput] = useState<'exit' | 'return' | null>(null)
     const [viewerRole, setViewerRole] = useState('')
+    const [viewerName, setViewerName] = useState('')
 
     const [awaitingExit, setAwaitingExit] = useState<GatePass[]>([])
     const [awaitingReturn, setAwaitingReturn] = useState<GatePass[]>([])
@@ -47,6 +55,7 @@ export default function SecurityPage() {
             const profile = await requireRole(['security', 'admin'], router, '/dashboard')
             if (!profile) return
             setViewerRole(profile.role)
+            setViewerName(profile.full_name || profile.email)
             await fetchLists()
         }
         init()
@@ -213,32 +222,41 @@ export default function SecurityPage() {
     }
 
     const overdue = pass ? isOverdue(pass) : false
+    const inputClass = "w-full px-4 py-3 rounded-sm bg-white border border-gp-line text-gp-ink placeholder:text-gp-steel/60 outline-none focus:border-gp-navy focus:ring-2 focus:ring-gp-navy/10 transition"
 
     return (
-        <main className="min-h-screen bg-gray-50 p-4 sm:p-6">
-            <div className="max-w-3xl mx-auto">
+        <main className="min-h-screen bg-gp-paper flex flex-col">
+            <PortalHeader
+                userName={viewerName}
+                roleLabel={ROLE_LABELS[viewerRole] || viewerRole}
+                onLogout={handleLogout}
+            />
+
+            <div className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8">
 
                 {/* Header */}
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-start justify-between mb-6 flex-wrap gap-3">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Security Gate Check</h1>
-                        <p className="text-gray-500 mt-1">Enter a gate pass ID or number to verify it</p>
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-gp-steel mb-1">
+                            Checkpoint Verification
+                        </p>
+                        <h1 className="text-2xl font-heading font-semibold text-gp-ink">Security Gate Check</h1>
+                        <p className="text-gp-steel text-sm mt-1">Enter a gate pass ID or number to verify it</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                        {viewerRole === 'admin' && (
-                            <button onClick={() => router.push('/dashboard')} className="text-gray-500 hover:text-gray-900 transition text-sm font-medium">
-                                ← Back to Dashboard
-                            </button>
-                        )}
-                        <button onClick={handleLogout} className="px-3 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-100 transition text-sm font-medium">
-                            Logout
+                    {viewerRole === 'admin' && (
+                        <button
+                            onClick={() => router.push('/dashboard')}
+                            className="text-gp-steel hover:text-gp-navy transition text-sm font-medium"
+                        >
+                            ← Back to Dashboard
                         </button>
-                    </div>
+                    )}
                 </div>
 
                 {/* Search box */}
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Gate Pass ID / Number</label>
+                <div className="bg-white border border-gp-line rounded-md shadow-sm p-6 mb-6">
+                    <div className="h-1 bg-gp-navy -m-6 mb-6 rounded-t-md" />
+                    <label className="block text-xs uppercase tracking-wide text-gp-steel mb-2">Gate Pass ID / Number</label>
                     <div className="flex gap-3">
                         <input
                             type="text"
@@ -246,89 +264,91 @@ export default function SecurityPage() {
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                             onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                            className="flex-1 px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition text-lg"
+                            className={`flex-1 text-lg ${inputClass}`}
                             autoFocus
                         />
                         <button
                             onClick={handleSearch}
                             disabled={searching}
-                            className="px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold transition"
+                            className="px-6 py-3 rounded-sm bg-gp-navy hover:bg-gp-navy-deep disabled:bg-gp-navy/40 text-gp-paper font-semibold transition tracking-wide"
                         >
-                            {searching ? 'Checking...' : 'Check'}
+                            {searching ? 'Checking…' : 'Check'}
                         </button>
                     </div>
                     {searchError && (
-                        <p className="text-red-600 text-sm mt-3">{searchError}</p>
+                        <p className="text-sm text-gp-rust bg-gp-rust/5 border border-gp-rust/30 rounded-sm px-3 py-2 mt-3">
+                            {searchError}
+                        </p>
                     )}
                 </div>
 
                 {/* Result card */}
                 {pass && (
-                    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6 mb-6">
+                    <div className="bg-white border border-gp-line rounded-md shadow-sm p-6 mb-6">
                         <div className="flex items-center justify-between flex-wrap gap-3 mb-5">
                             <div>
-                                <h2 className="text-lg font-bold text-gray-900">{pass.pass_number}</h2>
+                                <h2 className="text-lg font-heading font-semibold text-gp-ink">{pass.pass_number}</h2>
                                 <div className="flex gap-2 mt-2 flex-wrap">
-                                    <span className={`text-xs px-3 py-1 rounded-full border font-medium ${overdue ? STATUS_COLORS.overdue : STATUS_COLORS[pass.status]}`}>
+                                    <span className={`text-xs px-3 py-1 rounded-sm border font-medium uppercase tracking-wide ${overdue ? STATUS_COLORS.overdue : STATUS_COLORS[pass.status]}`}>
                                         {overdue ? STATUS_LABELS.overdue : (STATUS_LABELS[pass.status] || pass.status)}
                                     </span>
-                                    <span className={`text-xs px-3 py-1 rounded-full border font-medium ${PASS_TYPE_COLORS[pass.type]}`}>
+                                    <span className={`text-xs px-3 py-1 rounded-sm border font-medium uppercase tracking-wide ${PASS_TYPE_COLORS[pass.type]}`}>
                                         {PASS_TYPE_LABELS[pass.type] || pass.type}
                                     </span>
                                 </div>
                             </div>
 
                             <a href={`/gate-pass/${pass.id}`}
-                                className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                                className="text-gp-navy hover:text-gp-amber text-sm font-medium"
                             >
                                 Full Details →
                             </a>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3 mb-4">
-                            <div className="bg-gray-50 rounded-lg p-3">
-                                <p className="text-gray-400 text-xs mb-1">Vehicle Number</p>
-                                <p className="text-gray-900 font-medium">{pass.vehicle_number}</p>
+                            <div className="bg-gp-paper/60 border border-gp-line rounded-sm p-3">
+                                <p className="text-gp-steel text-xs mb-1 uppercase tracking-wide">Vehicle Number</p>
+                                <p className="text-gp-ink font-medium">{pass.vehicle_number}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-lg p-3">
-                                <p className="text-gray-400 text-xs mb-1">Department</p>
-                                <p className="text-gray-900 font-medium">{pass.department}</p>
+                            <div className="bg-gp-paper/60 border border-gp-line rounded-sm p-3">
+                                <p className="text-gp-steel text-xs mb-1 uppercase tracking-wide">Department</p>
+                                <p className="text-gp-ink font-medium">{pass.department}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-lg p-3">
-                                <p className="text-gray-400 text-xs mb-1">From → To</p>
-                                <p className="text-gray-900 font-medium">{pass.from_location || 'N/A'} → {pass.to_location || 'N/A'}</p>
+                            <div className="bg-gp-paper/60 border border-gp-line rounded-sm p-3">
+                                <p className="text-gp-steel text-xs mb-1 uppercase tracking-wide">From → To</p>
+                                <p className="text-gp-ink font-medium">{pass.from_location || 'N/A'} → {pass.to_location || 'N/A'}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-lg p-3">
-                                <p className="text-gray-400 text-xs mb-1">Driver</p>
-                                <p className="text-gray-900 font-medium">{pass.driver_name}</p>
+                            <div className="bg-gp-paper/60 border border-gp-line rounded-sm p-3">
+                                <p className="text-gp-steel text-xs mb-1 uppercase tracking-wide">Driver</p>
+                                <p className="text-gp-ink font-medium">{pass.driver_name}</p>
                             </div>
                             {pass.type === 'returnable' && (
-                                <div className="bg-gray-50 rounded-lg p-3 col-span-2">
-                                    <p className="text-gray-400 text-xs mb-1">Valid Until</p>
-                                    <p className={`font-medium ${overdue ? 'text-orange-600' : 'text-gray-900'}`}>{formatDate(pass.expiry_date)}</p>
+                                <div className="bg-gp-paper/60 border border-gp-line rounded-sm p-3 col-span-2">
+                                    <p className="text-gp-steel text-xs mb-1 uppercase tracking-wide">Valid Until</p>
+                                    <p className={`font-medium ${overdue ? 'text-gp-rust' : 'text-gp-ink'}`}>{formatDate(pass.expiry_date)}</p>
                                 </div>
                             )}
                         </div>
 
-                        <div className="text-gray-500 text-sm mb-4">
+                        <div className="text-gp-steel text-sm mb-4">
                             {pass.materials?.length} material item(s)
                         </div>
 
                         {/* Action area depending on status */}
                         {pass.status === 'pending' && (
-                            <p className="text-amber-700 text-sm bg-amber-50 border border-amber-200 rounded-xl p-4">
+                            <p className="text-sm text-gp-amber bg-gp-amber/5 border border-gp-amber/30 rounded-sm p-4">
                                 This pass has not been approved yet. It cannot exit the gate.
                             </p>
                         )}
 
                         {pass.status === 'rejected' && (
-                            <p className="text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-4">
+                            <p className="text-sm text-gp-rust bg-gp-rust/5 border border-gp-rust/30 rounded-sm p-4">
                                 This pass was rejected and is not valid for gate exit.
                             </p>
                         )}
 
                         {pass.status === 'cancelled' && (
-                            <p className="text-gray-600 text-sm bg-gray-50 border border-gray-200 rounded-xl p-4">
+                            <p className="text-sm text-gp-steel bg-gp-steel/5 border border-gp-steel/30 rounded-sm p-4">
                                 This pass was cancelled and is not valid for gate exit.
                             </p>
                         )}
@@ -336,22 +356,22 @@ export default function SecurityPage() {
                         {pass.status === 'approved' && (
                             <div>
                                 {pass.gate_reject_reason && (
-                                    <p className="text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
+                                    <p className="text-sm text-gp-rust bg-gp-rust/5 border border-gp-rust/30 rounded-sm p-3 mb-3">
                                         ✕ Exit was denied at the gate — <span className="font-medium">{pass.gate_reject_reason}</span>. Re-check and approve once resolved.
                                     </p>
                                 )}
-                                <p className="text-sm text-gray-600 mb-3">Verify vehicle, driver and materials match this pass, then:</p>
+                                <p className="text-sm text-gp-steel mb-3">Verify vehicle, driver and materials match this pass, then:</p>
                                 <div className="flex gap-3">
                                     <button
                                         onClick={handleApproveExit}
                                         disabled={actionLoading}
-                                        className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-semibold transition"
+                                        className="flex-1 py-3 rounded-sm bg-gp-forest hover:bg-gp-forest/90 disabled:bg-gp-forest/40 text-gp-paper font-semibold transition tracking-wide"
                                     >
                                         ✓ Approve Exit
                                     </button>
                                     <button
                                         onClick={() => setShowDenyInput(showDenyInput === 'exit' ? null : 'exit')}
-                                        className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition"
+                                        className="flex-1 py-3 rounded-sm bg-gp-rust hover:bg-gp-rust/90 text-gp-paper font-semibold transition tracking-wide"
                                     >
                                         ✕ Deny Exit
                                     </button>
@@ -363,12 +383,12 @@ export default function SecurityPage() {
                                             placeholder="Reason for denying exit..."
                                             value={denyReason}
                                             onChange={e => setDenyReason(e.target.value)}
-                                            className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-red-500 transition mb-2"
+                                            className="w-full px-4 py-3 rounded-sm bg-white border border-gp-line text-gp-ink placeholder:text-gp-steel/60 outline-none focus:border-gp-rust transition mb-2"
                                         />
                                         <button
                                             onClick={handleDenyExit}
                                             disabled={actionLoading || !denyReason}
-                                            className="w-full py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white text-sm font-medium transition"
+                                            className="w-full py-2 rounded-sm bg-gp-rust hover:bg-gp-rust/90 disabled:bg-gp-rust/40 text-gp-paper text-sm font-medium transition"
                                         >
                                             Confirm Denial
                                         </button>
@@ -380,27 +400,27 @@ export default function SecurityPage() {
                         {pass.status === 'exited' && pass.type === 'returnable' && (
                             <div>
                                 {overdue && (
-                                    <p className="text-orange-700 text-sm bg-orange-50 border border-orange-200 rounded-xl p-3 mb-3">
+                                    <p className="text-sm text-gp-rust bg-gp-rust/5 border border-gp-rust/30 rounded-sm p-3 mb-3">
                                         ⚠️ This material is overdue for return.
                                     </p>
                                 )}
                                 {pass.gate_reject_reason && (
-                                    <p className="text-red-700 text-sm bg-red-50 border border-red-200 rounded-xl p-3 mb-3">
+                                    <p className="text-sm text-gp-rust bg-gp-rust/5 border border-gp-rust/30 rounded-sm p-3 mb-3">
                                         ✕ Return was flagged — <span className="font-medium">{pass.gate_reject_reason}</span>. Re-check and confirm once resolved.
                                     </p>
                                 )}
-                                <p className="text-sm text-gray-600 mb-3">Material is out. When it comes back through the gate:</p>
+                                <p className="text-sm text-gp-steel mb-3">Material is out. When it comes back through the gate:</p>
                                 <div className="flex gap-3">
                                     <button
                                         onClick={handleApproveReturn}
                                         disabled={actionLoading}
-                                        className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-semibold transition"
+                                        className="flex-1 py-3 rounded-sm bg-gp-forest hover:bg-gp-forest/90 disabled:bg-gp-forest/40 text-gp-paper font-semibold transition tracking-wide"
                                     >
                                         ✓ Mark Returned
                                     </button>
                                     <button
                                         onClick={() => setShowDenyInput(showDenyInput === 'return' ? null : 'return')}
-                                        className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold transition"
+                                        className="flex-1 py-3 rounded-sm bg-gp-rust hover:bg-gp-rust/90 text-gp-paper font-semibold transition tracking-wide"
                                     >
                                         ✕ Flag Issue
                                     </button>
@@ -412,12 +432,12 @@ export default function SecurityPage() {
                                             placeholder="What's wrong (mismatch, damage, etc.)..."
                                             value={denyReason}
                                             onChange={e => setDenyReason(e.target.value)}
-                                            className="w-full px-4 py-3 rounded-xl bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-red-500 transition mb-2"
+                                            className="w-full px-4 py-3 rounded-sm bg-white border border-gp-line text-gp-ink placeholder:text-gp-steel/60 outline-none focus:border-gp-rust transition mb-2"
                                         />
                                         <button
                                             onClick={handleDenyReturn}
                                             disabled={actionLoading || !denyReason}
-                                            className="w-full py-2 rounded-lg bg-red-600 hover:bg-red-700 disabled:bg-red-300 text-white text-sm font-medium transition"
+                                            className="w-full py-2 rounded-sm bg-gp-rust hover:bg-gp-rust/90 disabled:bg-gp-rust/40 text-gp-paper text-sm font-medium transition"
                                         >
                                             Confirm Flag
                                         </button>
@@ -427,7 +447,7 @@ export default function SecurityPage() {
                         )}
 
                         {pass.status === 'completed' && (
-                            <p className="text-violet-700 text-sm bg-violet-50 border border-violet-200 rounded-xl p-4">
+                            <p className="text-sm text-gp-paper bg-gp-navy border border-gp-navy rounded-sm p-4">
                                 ✓ This gate pass is fully completed. {pass.returned_at ? `Returned ${formatDateTime(pass.returned_at)}.` : pass.exited_at ? `Exited ${formatDateTime(pass.exited_at)}.` : ''}
                             </p>
                         )}
@@ -435,40 +455,40 @@ export default function SecurityPage() {
                 )}
 
                 {/* Pending lists for quick reference */}
-                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
+                <div className="bg-white border border-gp-line rounded-md shadow-sm p-6">
                     <div className="flex gap-2 mb-4">
                         <button
                             onClick={() => setTab('exit')}
-                            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === 'exit' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            className={`px-4 py-2 rounded-sm text-xs font-semibold uppercase tracking-wide border transition ${tab === 'exit' ? 'bg-gp-navy text-gp-paper border-gp-navy' : 'bg-white text-gp-steel border-gp-line hover:border-gp-navy/40 hover:text-gp-navy'}`}
                         >
                             Awaiting Exit ({awaitingExit.length})
                         </button>
                         <button
                             onClick={() => setTab('return')}
-                            className={`px-4 py-2 rounded-xl text-sm font-medium transition ${tab === 'return' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                            className={`px-4 py-2 rounded-sm text-xs font-semibold uppercase tracking-wide border transition ${tab === 'return' ? 'bg-gp-navy text-gp-paper border-gp-navy' : 'bg-white text-gp-steel border-gp-line hover:border-gp-navy/40 hover:text-gp-navy'}`}
                         >
                             Awaiting Return ({awaitingReturn.length})
                         </button>
                     </div>
 
                     {listLoading ? (
-                        <p className="text-gray-400 text-sm py-6 text-center">Loading...</p>
+                        <p className="text-gp-steel text-sm py-6 text-center">Loading...</p>
                     ) : (
                         <div className="space-y-2">
                             {(tab === 'exit' ? awaitingExit : awaitingReturn).length === 0 ? (
-                                <p className="text-gray-400 text-sm py-6 text-center">Nothing here right now.</p>
+                                <p className="text-gp-steel text-sm py-6 text-center">Nothing here right now.</p>
                             ) : (
                                 (tab === 'exit' ? awaitingExit : awaitingReturn).map(p => (
                                     <button
                                         key={p.id}
                                         onClick={() => { setSearchTerm(p.pass_number); loadPass(p.pass_number) }}
-                                        className="w-full text-left bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl p-3 transition flex items-center justify-between"
+                                        className="w-full text-left bg-gp-paper/60 hover:bg-gp-paper border border-gp-line rounded-sm p-3 transition flex items-center justify-between"
                                     >
                                         <div>
-                                            <span className="text-gray-900 font-medium text-sm">{p.pass_number}</span>
-                                            <span className="text-gray-500 text-sm ml-2">{p.department} • {p.vehicle_number}</span>
+                                            <span className="text-gp-ink font-medium text-sm">{p.pass_number}</span>
+                                            <span className="text-gp-steel text-sm ml-2">{p.department} • {p.vehicle_number}</span>
                                         </div>
-                                        <span className="text-blue-600 text-sm">Check →</span>
+                                        <span className="text-gp-navy text-sm">Check →</span>
                                     </button>
                                 ))
                             )}
