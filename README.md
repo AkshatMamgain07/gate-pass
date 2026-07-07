@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Material Gate Pass System
 
-## Getting Started
+A full-stack material gate pass management system built as summer trainee project, digitizing the paper-based process of tracking material movement in and out of the plant — from request, to approval, to physical gate verification.
 
-First, run the development server:
+**Live:** [gate-pass-cyan.vercel.app](https://gate-pass-cyan.vercel.app)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres-3ECF8E?logo=supabase)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38BDF8?logo=tailwindcss)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript)
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Overview
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Material moving in or out of a manufacturing plant like BHEL needs a paper trail: what's leaving, who's carrying it, whether it's coming back, and who signed off on it. This project replaces that paper trail with a role-based web app that takes a gate pass from creation to approval to physical exit/return, with an audit log at every step.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Features
 
-## Learn More
+- **Role-based access** — separate portals for Department Users, Admins, and Security staff, each scoped to what they're allowed to see and do
+- **Two pass types** — Returnable (expects the material back, tracked for overdue returns) and Non-Returnable (one-way)
+- **Approval workflow** — passes are routed to the correct approver based on department, with full approve/reject history
+- **Security gate verification** — a dedicated checkpoint screen for verifying vehicle, driver, and materials before allowing exit or return, with deny/flag reasons logged
+- **Automated notifications** — email alerts on creation, approval, and a two-stage overdue-return escalation (creator first, then Security) via a scheduled cron job
+- **Vendor portal** — external vendors can register and view passes relevant to them without full system access
+- **PDF gate pass generation** — printable/downloadable pass documents for physical verification at the gate
+- **Atomic, collision-safe pass numbering** — a Postgres `SECURITY DEFINER` function guarantees unique sequential pass numbers even under concurrent submissions
+- **Activity log** — every create/approve/reject/exit/return action is recorded against the pass for traceability
 
-To learn more about Next.js, take a look at the following resources:
+## Tech Stack
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| Layer | Technology |
+|---|---|
+| Framework | Next.js (App Router) |
+| Language | TypeScript |
+| Database & Auth | Supabase (Postgres, Row Level Security, Auth) |
+| Styling | Tailwind CSS |
+| Email | Resend |
+| PDF Generation | pdfkit |
+| Deployment | Vercel |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Roles
 
-## Deploy on Vercel
+| Role | Access |
+|---|---|
+| **User** | Create gate passes for their department, track their own submissions |
+| **Admin** | Full visibility across all passes, approves requests, manages Security accounts |
+| **Security** | Gate checkpoint — verifies and clears passes for physical exit/return |
+| **Vendor** | Limited external portal for passes involving them |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Project Structure
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+app/
+├── login/                # Role-based sign-in
+├── signup/               # Registration
+├── dashboard/            # User & Admin gate pass list
+├── gate-pass/
+│   ├── new/              # Create a gate pass
+│   └── [id]/             # View / edit a gate pass
+├── security/             # Security checkpoint verification screen
+├── admin/                # Admin-only management views
+├── vendor/               # Vendor portal
+└── api/                  # Route handlers (PDF export, email, overdue cron)
+components/                # Shared UI (PortalHeader, form primitives)
+lib/                       # Supabase client, auth helpers, business logic
