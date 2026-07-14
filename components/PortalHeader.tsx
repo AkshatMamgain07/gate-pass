@@ -1,28 +1,21 @@
-import Link from 'next/link'
-
 interface PortalHeaderProps {
     userName?: string
     roleLabel?: string
     onLogout?: () => void
+    greeting?: string
 }
 
-export function PortalHeader({ userName, roleLabel, onLogout }: PortalHeaderProps) {
+export function PortalHeader({ userName, roleLabel, onLogout, greeting }: PortalHeaderProps) {
     return (
         <header className="bg-gp-navy">
-            <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-                <Link href="/dashboard" className="flex items-center gap-3">
-                    <span className="flex items-center justify-center w-9 h-9 rounded-sm border border-gp-amber/50 text-gp-amber font-heading text-sm font-bold">
-                        GP
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between">
+                {greeting ? (
+                    <span className="text-[11px] uppercase tracking-[0.2em] text-gp-paper/80">
+                        {greeting}
                     </span>
-                    <span className="leading-tight">
-                        <span className="block text-[10px] uppercase tracking-[0.2em] text-gp-amber/90">
-                            BHEL Haridwar
-                        </span>
-                        <span className="block text-sm sm:text-base font-heading font-semibold text-gp-paper">
-                            Material Gate Pass System
-                        </span>
-                    </span>
-                </Link>
+                ) : (
+                    <span />
+                )}
 
                 {(userName || onLogout) && (
                     <div className="flex items-center gap-4">
@@ -47,7 +40,7 @@ export function PortalHeader({ userName, roleLabel, onLogout }: PortalHeaderProp
                     </div>
                 )}
             </div>
-            <div className="h-[3px] bg-gradient-to-r from-gp-amber via-gp-amber/60 to-transparent" />
+            <div className="h-[3px] bg-gradient-to-r from-gp-amber/60 via-gp-amber/40 to-transparent" />
         </header>
     )
 }
