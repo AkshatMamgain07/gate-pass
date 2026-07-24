@@ -212,6 +212,10 @@ export default function NewGatePassPage() {
     const inputClass = "w-full px-4 py-3 rounded-sm bg-white border border-gp-line text-gp-ink placeholder:text-gp-steel/60 outline-none focus:border-gp-navy focus:ring-2 focus:ring-gp-navy/10 transition"
     const labelClass = "block text-xs uppercase tracking-wide text-gp-steel mb-2"
 
+    // Small helper so every mandatory field label carries the same red
+    // asterisk instead of repeating the span markup everywhere.
+    const Required = () => <span className="text-gp-rust">&nbsp;*</span>
+
     return (
         <main className="min-h-screen bg-gp-paper flex flex-col">
             <PortalHeader
@@ -340,7 +344,7 @@ export default function NewGatePassPage() {
                         {/* From / To location */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className={labelClass}>From (location)</label>
+                                <label className={labelClass}>From (location)<Required /></label>
                                 <input
                                     type="text"
                                     placeholder="e.g. Stores, Shop No. 2"
@@ -350,7 +354,7 @@ export default function NewGatePassPage() {
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>To (location)</label>
+                                <label className={labelClass}>To (location)<Required /></label>
                                 <input
                                     type="text"
                                     placeholder="e.g. Vendor workshop, Site X"
@@ -376,7 +380,7 @@ export default function NewGatePassPage() {
                         </div>
 
                         <div>
-                            <label className={labelClass}>Department</label>
+                            <label className={labelClass}>Department<Required /></label>
                             <select
                                 value={department}
                                 onChange={e => setDepartment(e.target.value)}
@@ -394,7 +398,7 @@ export default function NewGatePassPage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className={labelClass}>Vehicle Number</label>
+                                <label className={labelClass}>Vehicle Number<Required /></label>
                                 <input
                                     type="text"
                                     placeholder="e.g. UP32AB1234"
@@ -405,7 +409,7 @@ export default function NewGatePassPage() {
                                 />
                             </div>
                             <div>
-                                <label className={labelClass}>Driver Name</label>
+                                <label className={labelClass}>Driver Name<Required /></label>
                                 <input
                                     type="text"
                                     placeholder="Driver full name"
@@ -417,7 +421,7 @@ export default function NewGatePassPage() {
                         </div>
 
                         <div>
-                            <label className={labelClass}>Driver Phone</label>
+                            <label className={labelClass}>Driver Phone<Required /></label>
                             <input
                                 type="text"
                                 inputMode="numeric"
@@ -431,7 +435,7 @@ export default function NewGatePassPage() {
 
                         <div>
                             <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gp-ink">Materials</label>
+                                <label className="text-sm font-medium text-gp-ink">Materials<Required /></label>
                                 <button
                                     onClick={addMaterial}
                                     className="text-sm text-gp-navy hover:text-gp-amber font-medium transition"
