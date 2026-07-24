@@ -25,6 +25,10 @@ export const STATUS_COLORS: Record<string, string> = {
     exited: 'bg-gp-navy/10 text-gp-navy border-gp-navy/30',
     overdue: 'bg-gp-rust/15 text-gp-rust border-gp-rust/60',
     completed: 'bg-gp-navy text-gp-paper border-gp-navy',
+    // Security flagged/denied the pass at the gate (e.g. validity already
+    // expired, mismatched material, etc.) — same visual weight as overdue
+    // since both represent a problem state that needs admin attention.
+    gate_denied: 'bg-gp-rust/15 text-gp-rust border-gp-rust/60',
 }
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -35,6 +39,7 @@ export const STATUS_LABELS: Record<string, string> = {
     exited: 'Out – Material Gone',
     overdue: 'Overdue – Not Returned',
     completed: 'Completed',
+    gate_denied: 'Denied at Gate',
 }
 
 export const PASS_TYPE_COLORS: Record<string, string> = {
@@ -91,4 +96,13 @@ export function isOverdue(pass: { type: string; status: string; expiry_date?: st
     if (pass.status !== 'exited') return false
     if (!pass.expiry_date) return false
     return new Date(pass.expiry_date).getTime() < Date.now()
+}
+
+// True when security has flagged/denied the pass at the gate (left a
+// reason) but the pass hasn't actually exited yet — i.e. it's still
+// sitting in 'approved' status. Without this, the UI would keep showing
+// "Approved – Awaiting Gate Exit" even though the material was turned
+// away at the gate.
+export function isGateDenied(pass: { status: string; gate_reject_reason?: string | null; exited_at?: string | null }) {
+    return !!pass.gate_reject_reason && pass.status === 'approved' && !pass.exited_at
 }

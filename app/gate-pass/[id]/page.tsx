@@ -5,7 +5,7 @@ import { use } from 'react'
 import { supabase } from '@/lib/supabase'
 import { sendNotification } from '@/lib/notifications'
 import { canAccessPass } from '@/lib/auth'
-import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, formatDateTime, isOverdue } from '@/lib/gatepass'
+import { STATUS_COLORS, STATUS_LABELS, PASS_TYPE_COLORS, PASS_TYPE_LABELS, formatDate, formatDateTime, isOverdue, isGateDenied } from '@/lib/gatepass'
 import { PortalHeader } from '@/components/PortalHeader'
 
 interface GatePass {
@@ -49,6 +49,7 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
     const [expiryDate, setExpiryDate] = useState('')
     const [showApproveInput, setShowApproveInput] = useState(false)
     const [actionLoading, setActionLoading] = useState(false)
+    const [approveError, setApproveError] = useState('')
 
     useEffect(() => {
         const fetchData = async () => {
@@ -87,6 +88,14 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
         fetchData()
     }, [id])
 
+    // Minimum selectable expiry date: the day AFTER the pass was created.
+    // Derived from created_at rather than "today" so that a pass sitting
+    // in pending for a few days before approval still enforces
+    // expiry > creation, not just expiry >= today.
+    const minExpiryDate = pass?.created_at
+        ? new Date(new Date(pass.created_at).getTime() + 86400000).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10)
+
     const handleApproveClick = () => {
         if (pass?.type === 'returnable') {
             setShowApproveInput(true)
@@ -99,10 +108,27 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
         if (pass?.type === 'returnable' && !expiryDate) {
             return
         }
+
+        // Server-of-truth check happens via DB constraint too, but we
+        // validate here first so the admin gets an immediate, friendly
+        // error instead of a failed insert.
+        if (pass?.type === 'returnable' && pass.created_at) {
+            const expiry = new Date(expiryDate)
+            const createdAt = new Date(pass.created_at)
+            const expiryDay = new Date(expiry.getFullYear(), expiry.getMonth(), expiry.getDate())
+            const createdDay = new Date(createdAt.getFullYear(), createdAt.getMonth(), createdAt.getDate())
+
+            if (expiryDay <= createdDay) {
+                setApproveError('Valid until date must be after the pass creation date.')
+                return
+            }
+        }
+
+        setApproveError('')
         setActionLoading(true)
         const { data: { session } } = await supabase.auth.getSession()
 
-        await supabase
+        const { error } = await supabase
             .from('gate_passes')
             .update({
                 status: 'approved',
@@ -111,6 +137,12 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                 expiry_date: pass?.type === 'returnable' ? expiryDate : null,
             })
             .eq('id', id)
+
+        if (error) {
+            setApproveError('Could not approve — please check the date and try again.')
+            setActionLoading(false)
+            return
+        }
 
         await supabase.from('activity_logs').insert({
             gate_pass_id: id,
@@ -196,7 +228,12 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
     )
 
     const overdue = isOverdue(pass)
-    const effStatus = overdue ? 'overdue' : pass.status
+    // Security can flag/deny a pass at the gate (leaving a reason) without
+    // changing pass.status away from 'approved' — so without this check the
+    // badge would keep showing "Approved – Awaiting Gate Exit" even though
+    // the material was actually turned away at the gate.
+    const gateDenied = isGateDenied(pass)
+    const effStatus = overdue ? 'overdue' : gateDenied ? 'gate_denied' : pass.status
     const canEdit = EDITABLE_STATUSES.includes(pass.status) &&
         (userRole === 'admin' || (pass.status === 'pending' && pass.created_by === viewerId))
 
@@ -349,10 +386,16 @@ export default function GatePassDetailPage({ params }: { params: Promise<{ id: s
                                             <input
                                                 type="date"
                                                 value={expiryDate}
-                                                min={new Date().toISOString().slice(0, 10)}
-                                                onChange={e => setExpiryDate(e.target.value)}
+                                                min={minExpiryDate}
+                                                onChange={e => {
+                                                    setExpiryDate(e.target.value)
+                                                    if (approveError) setApproveError('')
+                                                }}
                                                 className="w-full px-4 py-3 rounded-sm bg-white border border-gp-navy/30 text-gp-ink outline-none focus:border-gp-navy transition mb-3 font-mono"
                                             />
+                                            {approveError && (
+                                                <p className="text-gp-rust text-xs mb-3">{approveError}</p>
+                                            )}
                                             <button
                                                 onClick={handleApprove}
                                                 disabled={actionLoading || !expiryDate}
